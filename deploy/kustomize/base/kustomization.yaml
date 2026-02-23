@@ -1,0 +1,8 @@
+namespace: universe
+resources:
+  - namespace.yaml
+  - minio.yaml
+  - operator.yaml
+  - networkpolicy-agent-deny-egress.yaml
+  - networkpolicy-agent-allow-egress.yaml
+  - networkpolicy-sandbox-deny-egress.yaml

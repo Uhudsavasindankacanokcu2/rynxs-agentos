@@ -1,0 +1,27 @@
+apiVersion: universe.ai/v1alpha1
+kind: Agent
+metadata:
+  name: berkan-agent
+  namespace: universe
+spec:
+  universeRef: u0
+  runtimeImage: "universe-agent-runtime:dev"
+  provider:
+    kind: local
+    baseUrl: "http://llm-proxy.universe.svc.cluster.local:8080"
+    model: "gpt-oss"
+    apiKeySecretRef: "llm-api-key"
+  workspace:
+    size: "2Gi"
+  tools:
+    allow: ["fs.read","fs.write","http.fetch","sandbox.shell","sandbox.browser"]
+  network:
+    allowEgressTo: ["minio.universe.svc.cluster.local","llm-proxy.universe.svc.cluster.local"]
+  persona:
+    coreDominanceAlpha: 0.85
+    personaFlexibilityBeta: 0.35
+    personaSeparationGamma: 0.25
+  cognition:
+    recallStrength: 0.7
+    inferenceStrength: 0.8
+    learningRate: 0.6

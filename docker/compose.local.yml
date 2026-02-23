@@ -1,0 +1,11 @@
+services:
+  operator:
+    build:
+      context: ..
+      dockerfile: operator/Dockerfile
+    image: universe-operator:dev
+  agent-runtime:
+    build:
+      context: ..
+      dockerfile: agent-runtime/Dockerfile
+    image: universe-agent-runtime:dev

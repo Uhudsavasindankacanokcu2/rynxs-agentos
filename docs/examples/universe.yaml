@@ -1,0 +1,30 @@
+apiVersion: universe.ai/v1alpha1
+kind: Universe
+metadata:
+  name: u0
+  namespace: universe
+spec:
+  storage:
+    bucket:
+      endpoint: "http://minio.universe.svc.cluster.local:9000"
+      bucket: "universe"
+      accessKeySecretRef: "minio-access"
+      secretKeySecretRef: "minio-secret"
+  policies:
+    identityBleedRate: 0.0005
+    macroLuck: {min: 0.01, max: 0.10}
+    physics:
+      zonalJitterMin: 0.00001
+      zonalJitterMax: 0.0001
+      globalJitterRareEventRate: 0.000001
+    sleep:
+      instantBackupEverySeconds: 30
+      deepSleepEverySeconds: 180
+      deepSleepMinSeconds: 20
+  travel:
+    enabled: true
+    universes:
+      - id: U1
+        zones: ["family","work","friends"]
+        baseDilationLight: 2
+        baseDilationDeep: 40

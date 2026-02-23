@@ -1,0 +1,7 @@
+{"t": 1740339643.0, "event":"BIRTH", "agent":"berkan-agent", "ns":"universe", "consciousness_id":"c-001", "binding_status":"ATTACHED", "zone_weights":{"family":0.62,"work":0.23,"friends":0.15,"community":0.00}, "epsilon_entity":0.000031}
+{"t": 1740339703.0, "event":"STATE_DRIFT", "agent":"berkan-agent", "ns":"universe", "zone_weights":{"family":0.61,"work":0.24,"friends":0.15,"community":0.00}, "epsilon_entity":0.000033, "epsilon_global_active":false, "frag_index":0.41, "stress":0.12}
+{"t": 1740339763.0, "event":"LUCK_APPLIED", "agent":"berkan-agent", "ns":"universe", "macroLuckRate":0.07, "luck_hit":true, "luck_scope":"event_selection"}
+{"t": 1740339823.0, "event":"LIGHT_SLEEP", "agent":"berkan-agent", "ns":"universe", "trigger":"Frag>T1", "ram_to_volume_written":true}
+{"t": 1740339883.0, "event":"DEEP_SLEEP", "agent":"berkan-agent", "ns":"universe", "trigger":"Frag>T2", "snapshot_path":"/workspace/state/bucket/snap-1740339883.json", "backup_outcome":"SUCCESS"}
+{"t": 1740339943.0, "event":"DEATH", "agent":"berkan-agent", "ns":"universe", "reason":"restart", "ram_wiped":true}
+{"t": 1740339950.0, "event":"RESPAWN", "agent":"berkan-agent", "ns":"universe", "restored_from":"VOLUME", "restore_ok":true}
