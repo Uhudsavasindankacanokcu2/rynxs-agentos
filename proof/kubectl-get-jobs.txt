@@ -1,0 +1,3 @@
+NAME                                READY   STATUS      RESTARTS   AGE
+sandbox-shell-berkan-agent-abc123   0/1     Completed   0          45s
+sandbox-shell-berkan-agent-def456   0/1     Completed   0          2m
