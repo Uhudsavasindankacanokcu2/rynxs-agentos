@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo-banner.png" width="600" alt="Rynxs Logo">
+</p>
+
 # Rynxs: Policy-Enforced Multi-AI Worker and "AI Computers" Platform on Kubernetes
 
 Rynxs is a Kubernetes-native platform designed to orchestrate large-scale AI agents by providing them with "AI Computers"—controlled workspaces, tools, and sandboxed execution environments—governed by strict policy enforcement and deterministic control loops.
