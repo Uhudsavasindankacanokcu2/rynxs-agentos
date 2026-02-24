@@ -53,6 +53,7 @@ def ensure_agent_runtime(agent_name: str, namespace: str, agent_spec: dict, logg
             template=client.V1PodTemplateSpec(
                 metadata=client.V1ObjectMeta(labels={"app": "universe-agent", "agent": agent_name}),
                 spec=client.V1PodSpec(
+                    runtime_class_name="gvisor",
                     containers=[
                         client.V1Container(
                             name="runtime",
