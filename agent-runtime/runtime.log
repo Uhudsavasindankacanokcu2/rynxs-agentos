@@ -1,0 +1,33 @@
+Traceback (most recent call last):
+  File "/home/user/rynxs-agentos/agent-runtime/universe_agent/tools/sandbox_k8s.py", line 9, in __init__
+    config.load_incluster_config()
+  File "/home/user/rynxs-agentos/.venv/lib/python3.11/site-packages/kubernetes/config/incluster_config.py", line 121, in load_incluster_config
+    try_refresh_token=try_refresh_token).load_and_set(client_configuration)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/rynxs-agentos/.venv/lib/python3.11/site-packages/kubernetes/config/incluster_config.py", line 54, in load_and_set
+    self._load_config()
+  File "/home/user/rynxs-agentos/.venv/lib/python3.11/site-packages/kubernetes/config/incluster_config.py", line 62, in _load_config
+    raise ConfigException("Service host/port is not set.")
+kubernetes.config.config_exception.ConfigException: Service host/port is not set.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/user/rynxs-agentos/agent-runtime/universe_agent/runtime.py", line 164, in <module>
+    main()
+  File "/home/user/rynxs-agentos/agent-runtime/universe_agent/runtime.py", line 31, in main
+    runner = ToolRunner(workspace, policy, agent_name=agent_name, namespace=namespace)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/rynxs-agentos/agent-runtime/universe_agent/tools/runner.py", line 15, in __init__
+    self.sandbox = SandboxK8s(namespace)
+                   ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/rynxs-agentos/agent-runtime/universe_agent/tools/sandbox_k8s.py", line 11, in __init__
+    config.load_kube_config()
+  File "/home/user/rynxs-agentos/.venv/lib/python3.11/site-packages/kubernetes/config/kube_config.py", line 819, in load_kube_config
+    loader = _get_kube_config_loader(
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/rynxs-agentos/.venv/lib/python3.11/site-packages/kubernetes/config/kube_config.py", line 776, in _get_kube_config_loader
+    raise ConfigException(
+kubernetes.config.config_exception.ConfigException: Invalid kube-config file. No configuration found.
