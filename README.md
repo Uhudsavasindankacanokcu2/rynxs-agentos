@@ -1,8 +1,8 @@
-⚠️ Branch Guide
+## Branch guide
 
-- main → Full Kubernetes architecture
-- proof-lite → Minimal deterministic runtime (no external dependencies)
-- production-arch → Active development for enterprise sandbox mode
+- main: full Kubernetes architecture (operator + sandbox + policy enforcement)
+- proof-lite: minimal deterministic runtime (no external dependencies)
+- production-arch: enterprise sandbox development lane (gVisor/Kata, policy packs, signed images, immutable audit)
 
 <p align="center">
   <img src="assets/official-banner.jpg" width="800" alt="Rynxs Official Banner">
@@ -15,7 +15,6 @@ Rynxs is a Kubernetes-native platform designed to orchestrate large-scale AI age
 Rather than a simple multi-worker queue, Rynxs treats agent behavior as a governable resource, leveraging the Kubernetes operator pattern to reconcile desired safety states with actual agent execution.
 
 ---
-
 
 ## Technical Pillars
 
