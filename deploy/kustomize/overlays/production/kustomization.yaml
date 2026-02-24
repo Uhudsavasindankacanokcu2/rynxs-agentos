@@ -1,0 +1,57 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: universe
+
+namePrefix: prod-
+
+bases:
+  - ../../base
+
+images:
+  - name: ghcr.io/uhudsavasindankacanokcu2/rynxs-operator
+    newTag: v0.1.0
+    newName: ghcr.io/your-org/rynxs-operator
+  - name: minio/minio
+    newTag: RELEASE.2024-02-24T17-11-14Z
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "1Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "4Gi"
+    target:
+      kind: Deployment
+      name: rynxs-operator
+  - patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: "100Gi"
+    target:
+      kind: PersistentVolumeClaim
+      name: minio-pvc
+  - patch: |-
+      - op: add
+        path: /metadata/labels/pod-security.kubernetes.io~1enforce
+        value: restricted
+      - op: add
+        path: /metadata/labels/pod-security.kubernetes.io~1audit
+        value: restricted
+    target:
+      kind: Namespace
+      name: universe
+
+replicas:
+  - name: rynxs-operator
+    count: 3
+  - name: minio
+    count: 1

@@ -1,33 +1,45 @@
+{{- if .Values.minio.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: minio-pvc
-  namespace: universe
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "rynxs.minio.labels" . | nindent 4 }}
 spec:
   accessModes:
     - ReadWriteOnce
+  {{- if .Values.minio.persistence.storageClass }}
+  storageClassName: {{ .Values.minio.persistence.storageClass }}
+  {{- end }}
   resources:
     requests:
-      storage: 5Gi
+      storage: {{ .Values.minio.persistence.size }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: minio
-  namespace: universe
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "rynxs.minio.labels" . | nindent 4 }}
+    app: minio
 spec:
-  replicas: 1
+  replicas: {{ .Values.minio.replicaCount }}
   selector:
     matchLabels:
       app: minio
+      {{- include "rynxs.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
         app: minio
+        {{- include "rynxs.selectorLabels" . | nindent 8 }}
     spec:
       containers:
         - name: minio
-          image: minio/minio:latest
+          image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
+          imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
           args:
             - server
             - /data
@@ -35,16 +47,11 @@ spec:
             - containerPort: 9000
           env:
             - name: MINIO_ROOT_USER
-              value: minioadmin
+              value: {{ .Values.minio.credentials.rootUser }}
             - name: MINIO_ROOT_PASSWORD
-              value: minioadmin
+              value: {{ .Values.minio.credentials.rootPassword }}
           resources:
-            requests:
-              cpu: "250m"
-              memory: "512Mi"
-            limits:
-              cpu: "1000m"
-              memory: "2Gi"
+            {{- toYaml .Values.minio.resources | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /minio/health/live
@@ -69,7 +76,9 @@ apiVersion: v1
 kind: Service
 metadata:
   name: minio
-  namespace: universe
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "rynxs.minio.labels" . | nindent 4 }}
 spec:
   selector:
     app: minio
@@ -77,3 +86,4 @@ spec:
     - port: 9000
       targetPort: 9000
   type: ClusterIP
+{{- end }}
