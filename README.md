@@ -43,39 +43,40 @@ Rather than a simple multi-worker queue, Rynxs treats agent behavior as a govern
 
 ---
 
-## Quickstart (3-Minute Proof)
+## Quickstart (3-minute proof)
 
-### 1) Prepare Cluster
-```bash
-# Build and load images
-docker build -t Uhudsavasindankacanokcu2/rynxs-operator:v1.0.0-beta.1 -f operator/Dockerfile operator
-docker build -t Uhudsavasindankacanokcu2/rynxs-agent-runtime:v1.0.0-beta.1 -f agent-runtime/Dockerfile agent-runtime
-```
-
-### 2) Deploy Stack
+### 1) Install CRDs + base stack
 ```bash
 kubectl apply -f crds/
 kubectl apply -k deploy/kustomize/base
-```
-
-### 3) Launch Agent
-```bash
+kubectl apply -f docs/examples/universe.yaml
 kubectl apply -f docs/examples/agent.yaml
 ```
 
-### 4) Verification (Proof of Execution)
-Send a task to the agent's inbox and observe the isolated Job creation and audit trail:
+### 2) Find the agent pod (namespace-agnostic)
 ```bash
-POD=$(kubectl get pods -n universe -l app=rynxs-agent -o jsonpath='{.items[0].metadata.name}')
-kubectl exec -n universe "$POD" -- sh -lc 'echo "{\"text\":\"run uname -a in sandbox\"}" >> /workspace/inbox.jsonl'
-
-# Observe the sandbox job
-kubectl get jobs -n universe | grep sandbox-shell
-
-# Verify Audit and Outbox Proof
-kubectl exec -n universe "$POD" -- sh -lc 'tail -n 3 /workspace/audit.jsonl'
-kubectl exec -n universe "$POD" -- sh -lc 'tail -n 1 /workspace/outbox.jsonl'
+POD=$(kubectl get pods -A -l app=rynxs-agent -o jsonpath='{.items[0].metadata.name}')
+NS=$(kubectl get pods -A -l app=rynxs-agent -o jsonpath='{.items[0].metadata.namespace}')
+echo "Agent pod: $NS/$POD"
 ```
+
+### 3) Send a task (via workspace inbox)
+```bash
+kubectl exec -n "$NS" "$POD" -- sh -lc 'echo "{\"text\":\"run uname -a in sandbox\"}" >> /workspace/inbox.jsonl'
+kubectl logs -n "$NS" "$POD" -f
+```
+
+### 4) Proof: sandbox job + audit + outbox
+```bash
+kubectl get jobs -n "$NS" | grep sandbox-shell || true
+kubectl exec -n "$NS" "$POD" -- sh -lc 'tail -n 3 /workspace/audit.jsonl'
+kubectl exec -n "$NS" "$POD" -- sh -lc 'tail -n 1 /workspace/outbox.jsonl | head -c 800 && echo'
+```
+
+**Expected Results:**
+- A Job named `sandbox-shell-<agent>-<suffix>` appears.
+- `audit.jsonl` contains a `sandbox_job` reference with SHA-256 tool metadata.
+- `outbox.jsonl` contains the verified execution output.
 
 ---
 
