@@ -4,3 +4,4 @@ resources:
   - universe.ai_agents.yaml
   - universe.ai_sessions.yaml
   - universe.ai_universes.yaml
+  - universe.ai_tasks.yaml
