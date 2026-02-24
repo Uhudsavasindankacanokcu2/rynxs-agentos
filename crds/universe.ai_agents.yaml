@@ -20,4 +20,14 @@ spec:
           properties:
             spec:
               type: object
+              properties:
+                image:
+                  type: object
+                  properties:
+                    repository:
+                      type: string
+                    tag:
+                      type: string
+                    verify:
+                      type: boolean
               x-kubernetes-preserve-unknown-fields: true
