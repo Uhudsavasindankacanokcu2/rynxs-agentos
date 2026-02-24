@@ -2,6 +2,12 @@
   <img src="assets/logo-banner.png" width="600" alt="Rynxs Logo">
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Release-v1.0.0--beta.1-blue" alt="Release">
+  <img src="https://img.shields.io/badge/License-Apache--2.0-green" alt="License">
+  <img src="https://img.shields.io/badge/Docker-Published-blue?logo=docker" alt="Docker">
+</p>
+
 # Rynxs: Policy-Enforced Multi-AI Worker and "AI Computers" Platform on Kubernetes
 
 Rynxs is a Kubernetes-native platform designed to orchestrate large-scale AI agents by providing them with "AI Computers"—controlled workspaces, tools, and sandboxed execution environments—governed by strict policy enforcement and deterministic control loops.
@@ -32,8 +38,8 @@ Rather than a simple multi-worker queue, Rynxs treats agent behavior as a govern
 - **Model Ingress**: Support for local or cloud-based inference endpoints (OAI-compat).
 
 ### State Layer
-- **Workspace (PVC)**: Persistent local storage for agent files and audit traces.
-- **Deterministic Memory**: Implementation of RAM (volatile), Volume (persistent), and Bucket (atomic snapshots) invariants.
+- **Workspace (PVC)**: Persistent local storage for agent files and [audit traces](docs/audit.md).
+- **Deterministic Memory**: Implementation of RAM (volatile), Volume (persistent), and Bucket (atomic snapshots) [invariants](docs/universe-model.md).
 
 ---
 
@@ -42,8 +48,8 @@ Rather than a simple multi-worker queue, Rynxs treats agent behavior as a govern
 ### 1) Prepare Cluster
 ```bash
 # Build and load images
-docker build -t rynxs/operator:latest -f operator/Dockerfile operator
-docker build -t rynxs/runtime:latest -f agent-runtime/Dockerfile agent-runtime
+docker build -t Uhudsavasindankacanokcu2/rynxs-operator:v1.0.0-beta.1 -f operator/Dockerfile operator
+docker build -t Uhudsavasindankacanokcu2/rynxs-agent-runtime:v1.0.0-beta.1 -f agent-runtime/Dockerfile agent-runtime
 ```
 
 ### 2) Deploy Stack
@@ -58,13 +64,17 @@ kubectl apply -f docs/examples/agent.yaml
 ```
 
 ### 4) Verification (Proof of Execution)
-Send a task to the agent's inbox and observe the isolated Job creation:
+Send a task to the agent's inbox and observe the isolated Job creation and audit trail:
 ```bash
-POD=$(kubectl get pods -l app=rynxs-agent -o jsonpath='{.items[0].metadata.name}')
-kubectl exec "$POD" -- sh -lc 'echo "{\"text\":\"run uname -a in sandbox\"}" >> /workspace/inbox.jsonl'
+POD=$(kubectl get pods -n universe -l app=rynxs-agent -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n universe "$POD" -- sh -lc 'echo "{\"text\":\"run uname -a in sandbox\"}" >> /workspace/inbox.jsonl'
 
 # Observe the sandbox job
-kubectl get jobs | grep sandbox-shell
+kubectl get jobs -n universe | grep sandbox-shell
+
+# Verify Audit and Outbox Proof
+kubectl exec -n universe "$POD" -- sh -lc 'tail -n 3 /workspace/audit.jsonl'
+kubectl exec -n universe "$POD" -- sh -lc 'tail -n 1 /workspace/outbox.jsonl'
 ```
 
 ---
@@ -76,8 +86,8 @@ Rynxs implements the following security defaults for all workloads:
 - `readOnlyRootFilesystem`: Agent root is immutable.
 - `allowPrivilegeEscalation: false`: Limits the attack surface for container breakout.
 - `drop: ["ALL"]`: Minimum capability set.
-- `RuntimeClass`: Recommended support for gVisor or Kata for stronger isolation.
-- `Pod Security Admission`: Namespace-level enforcement of baseline/restricted profiles.
+- `RuntimeClass`: Recommended support for [gVisor](https://gvisor.dev/docs/user_guide/quick_start/kubernetes/) or [Kata](https://katacontainers.io/) for stronger isolation.
+- `Pod Security Admission`: Namespace-level enforcement of [baseline/restricted profiles](https://kubernetes.io/docs/concepts/security/pod-security-standards/).
 
 ---
 
