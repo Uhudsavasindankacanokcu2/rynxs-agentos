@@ -9,8 +9,6 @@ spec:
     plural: sessions
     singular: session
     kind: Session
-    shortNames:
-      - sess
   versions:
     - name: v1alpha1
       served: true
