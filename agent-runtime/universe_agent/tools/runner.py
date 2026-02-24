@@ -4,7 +4,7 @@ from typing import Any, Dict
 from ..workspace import Workspace
 from ..policy import UniversePolicy
 from .audit import write_audit, sha256_json, sha256_text
-# from .sandbox_k8s import SandboxK8s
+from .sandbox_k8s import SandboxK8s
 
 class ToolRunner:
     def __init__(self, workspace: Workspace, policy: UniversePolicy, agent_name: str = "agent", namespace: str = "universe"):
@@ -12,7 +12,7 @@ class ToolRunner:
         self.policy = policy
         self.agent_name = agent_name
         self.namespace = namespace
-        # self.sandbox = SandboxK8s(namespace)
+        self.sandbox = SandboxK8s(namespace)
 
     def run(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
         fn = tool_call.get("function", {})
@@ -76,16 +76,18 @@ class ToolRunner:
             return {"tool": name, "ok": True, "note": "stubbed in MVP"}
 
         if name == "sandbox.shell":
-            error_message = "sandbox.shell is disabled because the 'kubernetes' Python package is not installed."
+            job_name, out = self.sandbox.run_shell(args["cmd"])
             write_audit(self.workspace, {
                 "t": time.time(),
                 "agent": self.agent_name,
                 "ns": self.namespace,
                 "tool": name,
-                "allowed": False,
-                "reason": error_message,
+                "allowed": True,
                 "args_sha256": args_hash,
+                "sandbox_job": job_name,
+                "stdout_sha256": sha256_text(out),
+                "stdout_preview": out[:200],
             })
-            return {"tool": name, "ok": False, "error": error_message}
+            return {"tool": name, "ok": True, "stdout": out, "job": job_name}
 
         return {"tool": name, "ok": False, "error": "unknown tool"}
