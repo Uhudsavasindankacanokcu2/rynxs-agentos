@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo-banner.png" width="600" alt="Rynxs Logo">
+  <img src="assets/hero-banner.png" width="800" alt="Rynxs Hero Banner">
 </p>
 
 <p align="center">
@@ -13,6 +13,16 @@
 Rynxs is a Kubernetes-native platform designed to orchestrate large-scale AI agents by providing them with "AI Computers"—controlled workspaces, tools, and sandboxed execution environments—governed by strict policy enforcement and deterministic control loops.
 
 Rather than a simple multi-worker queue, Rynxs treats agent behavior as a governable resource, leveraging the Kubernetes operator pattern to reconcile desired safety states with actual agent execution.
+
+---
+
+## Visual Evidence
+
+<p align="center">
+  <img src="assets/terminal-demo.png" width="800" alt="Rynxs Terminal Demo">
+  <br>
+  <i>Figure 1: Sandbox Job execution and immutable audit trail verification.</i>
+</p>
 
 ---
 
