@@ -6,3 +6,4 @@ resources:
   - networkpolicy-agent-deny-egress.yaml
   - networkpolicy-agent-allow-egress.yaml
   - networkpolicy-sandbox-deny-egress.yaml
+  - gvisor-runtimeclass.yaml
