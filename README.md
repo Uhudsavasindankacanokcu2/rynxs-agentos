@@ -2,15 +2,6 @@
   <img src="assets/official-banner.jpg" width="800" alt="Rynxs Official Banner">
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Release-v1.0.0--beta.1-blue" alt="Release">
-  <img src="https://img.shields.io/badge/License-Apache--2.0-green" alt="License">
-  <img src="https://img.shields.io/badge/Docker-Published-blue?logo=docker" alt="Docker">
-</p>
-
-> [!NOTE]
-> If GitHub fails to load specific sections, you can [view the Full Story](docs/medium-story.md) directly for the complete technical overview.
-
 # Rynxs: Policy-Enforced Multi-AI Worker and "AI Computers" Platform on Kubernetes
 
 Rynxs is a Kubernetes-native platform designed to orchestrate large-scale AI agents by providing them with "AI Computers"—controlled workspaces, tools, and sandboxed execution environments—governed by strict policy enforcement and deterministic control loops.
