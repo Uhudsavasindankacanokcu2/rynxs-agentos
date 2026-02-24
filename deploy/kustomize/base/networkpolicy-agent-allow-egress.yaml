@@ -1,49 +1,27 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-egress-universe-agent
+  name: agent-allow-egress
   namespace: universe
 spec:
   podSelector:
     matchLabels:
-      app: universe-agent
+      network-policy: "allow-egress"
   policyTypes:
     - Egress
   egress:
-    # Allow DNS (CoreDNS) - adapt if your cluster uses different labels/namespace
+    # DNS (kube-system)
     - to:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
       ports:
         - protocol: UDP
           port: 53
         - protocol: TCP
           port: 53
-
-    # Allow MinIO service in same namespace
+    # same-namespace (universe) internal services
     - to:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: universe
-          podSelector:
-            matchLabels:
-              app: minio
-      ports:
-        - protocol: TCP
-          port: 9000
-
-    # Allow LLM proxy service (example label)
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: universe
-          podSelector:
-            matchLabels:
-              app: llm-proxy
-      ports:
-        - protocol: TCP
-          port: 8080

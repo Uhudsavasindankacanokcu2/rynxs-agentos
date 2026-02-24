@@ -4,20 +4,26 @@ metadata:
   name: universes.universe.ai
 spec:
   group: universe.ai
-  scope: Namespaced
+  scope: Cluster
   names:
     plural: universes
     singular: universe
     kind: Universe
-    shortNames: ["uni"]
+    shortNames:
+      - uni
   versions:
     - name: v1alpha1
       served: true
       storage: true
+      subresources:
+        status: {}
       schema:
         openAPIV3Schema:
           type: object
           properties:
             spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+            status:
               type: object
               x-kubernetes-preserve-unknown-fields: true
