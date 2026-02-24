@@ -9,8 +9,6 @@ spec:
     plural: universes
     singular: universe
     kind: Universe
-    shortNames:
-      - uni
   versions:
     - name: v1alpha1
       served: true
