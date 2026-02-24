@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches:
+  - patch: |-
+      - op: add
+        path: /spec/image/verify
+        value: true
+    target:
+      group: universe.ai
+      version: v1alpha1
+      kind: Agent
