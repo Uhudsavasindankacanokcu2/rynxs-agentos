@@ -1,1 +1,0 @@
-# Test - Claude bağlantı testi
