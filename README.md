@@ -1,3 +1,9 @@
+⚠️ Branch Guide
+
+- main → Full Kubernetes architecture
+- proof-lite → Minimal deterministic runtime (no external dependencies)
+- production-arch → Active development for enterprise sandbox mode
+
 <p align="center">
   <img src="assets/official-banner.jpg" width="800" alt="Rynxs Official Banner">
 </p>
