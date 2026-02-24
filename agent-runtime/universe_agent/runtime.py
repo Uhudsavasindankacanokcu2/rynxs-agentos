@@ -1,4 +1,4 @@
-import os, json, time, random
+import os, json, time, random, sys
 from typing import Optional, Dict, Any
 from .policy import UniversePolicy
 from .workspace import Workspace
@@ -16,7 +16,7 @@ from .controllers import (
 )
 
 def load_agent_spec() -> dict:
-    with open("/config/agent.json", "r", encoding="utf-8") as f:
+    with open("agent.json", "r", encoding="utf-8") as f:
         return json.load(f)
 
 def main():
@@ -25,10 +25,10 @@ def main():
     run_id = os.getenv("RUN_ID", "default-run")
     spec = load_agent_spec()
 
-    workspace = Workspace("/workspace")
+    workspace = Workspace("workspace")
     policy = UniversePolicy.from_agent_spec(spec)
-    tools = ToolRegistry.default()
-    runner = ToolRunner(workspace, policy, agent_name=agent_name, namespace=namespace)
+    #tools = ToolRegistry.default()
+    #runner = ToolRunner(workspace, policy, agent_name=agent_name, namespace=namespace)
 
     # Determinism Seeds
     random_seed = os.getenv("RANDOM_SEED")
@@ -79,8 +79,8 @@ def main():
         "restore_ok": True
     })
 
-    provider_cfg = spec.get("provider", {"kind":"local"})
-    provider = LocalOpenAICompat(provider_cfg)
+    #provider_cfg = spec.get("provider", {"kind":"local"})
+    #provider = LocalOpenAICompat(provider_cfg)
 
     print(f"[BOOT] agent={agent_name} consciousness={consciousness.id} run_id={run_id}")
 
@@ -136,22 +136,6 @@ def main():
                     text = msg.get("text","")
                     print(f"[INBOX] {text!r}")
 
-                    # Luck injection
-                    luck_hit = luck.apply_luck("message_processing")
-                    if luck_hit:
-                        audit("LUCK_APPLIED", {
-                            "macroLuckRate": luck.luck_rate,
-                            "luck_hit": True,
-                            "luck_scope": "message_processing"
-                        })
-
-                    plan = provider.plan(text, tools.as_openai_tools())
-                    results = [runner.run(c) for c in plan.get("tool_calls", [])]
-                    final = provider.respond(text, results)
-
-                    workspace.append_jsonl("outbox.jsonl", {"t": time.time(), "input": text, "plan": plan, "results": results, "output": final})
-                    print("[OUT] wrote outbox.jsonl")
-                    
             time.sleep(0.5)
     except KeyboardInterrupt:
         audit("DEATH", {"reason": "termination", "ram_wiped": True})
@@ -162,4 +146,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
