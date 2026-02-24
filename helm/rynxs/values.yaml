@@ -1,0 +1,61 @@
+nameOverride: ""
+fullnameOverride: ""
+
+namespace:
+  create: true
+  name: universe
+
+operator:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/uhudsavasindankacanokcu2/rynxs-operator
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  serviceAccount:
+    create: true
+    name: rynxs-operator
+  rbac:
+    create: true
+
+minio:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: minio/minio
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+  credentials:
+    rootUser: minioadmin
+    rootPassword: minioadmin
+
+networkPolicy:
+  enabled: true
+  agentDenyEgress: true
+  agentAllowEgress: true
+  sandboxDenyEgress: true
+
+gvisor:
+  enabled: false
+  runtimeHandler: runsc
+
+crds:
+  install: true
+  keep: true

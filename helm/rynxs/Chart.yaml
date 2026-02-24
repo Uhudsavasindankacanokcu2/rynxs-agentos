@@ -1,0 +1,17 @@
+apiVersion: v2
+name: rynxs
+description: Kubernetes-native AI workforce orchestration platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ai
+  - agents
+  - orchestration
+  - kubernetes
+home: https://github.com/Uhudsavasindankacanokcu2/rynxs-agentos
+sources:
+  - https://github.com/Uhudsavasindankacanokcu2/rynxs-agentos
+maintainers:
+  - name: Berkan SAL
+    email: berkansal4545@gmail.com

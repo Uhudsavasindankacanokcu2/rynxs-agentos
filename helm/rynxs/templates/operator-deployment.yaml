@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rynxs.fullname" . }}-operator
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "rynxs.operator.labels" . | nindent 4 }}
+    app: rynxs-operator
+spec:
+  replicas: {{ .Values.operator.replicaCount }}
+  selector:
+    matchLabels:
+      app: rynxs-operator
+      {{- include "rynxs.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: rynxs-operator
+        {{- include "rynxs.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.operator.serviceAccount.name }}
+      containers:
+        - name: operator
+          image: "{{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag }}"
+          imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+          env:
+            - name: WATCH_NAMESPACE
+              value: {{ .Values.namespace.name }}
+          resources:
+            {{- toYaml .Values.operator.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

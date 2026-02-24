@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: universe-dev
+
+namePrefix: dev-
+
+bases:
+  - ../../base
+
+images:
+  - name: ghcr.io/uhudsavasindankacanokcu2/rynxs-operator
+    newTag: latest
+  - name: minio/minio
+    newTag: latest
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "200m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "256Mi"
+    target:
+      kind: Deployment
+      name: rynxs-operator
+  - patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: "1Gi"
+    target:
+      kind: PersistentVolumeClaim
+      name: minio-pvc
+
+replicas:
+  - name: rynxs-operator
+    count: 1
+  - name: minio
+    count: 1
