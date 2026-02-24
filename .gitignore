@@ -1,47 +1,39 @@
+
 # Common
-.DS_Store
-.AppleDouble
-.LSOverride
-Icon
-
-
+# Kubernetes/Minio
 # Python
-__pycache__/
-*.py[cod]
+# Temporary
+# macOS
 *$py.class
+*.egg
+*.egg-info/
+*.py[cod]
 *.so
+.AppleDouble
+.DS_Store
+.LSOverride
 .Python
-env/
+.coverage
+.eggs/
+.installed.cfg
+.pytest_cache/
+/workspace/audit.jsonl
+/workspace/inbox.jsonl
+/workspace/outbox.jsonl
+/workspace/state/
+Icon
+__pycache__/
 build/
 develop-eggs/
 dist/
 downloads/
 eggs/
-.eggs/
+env/
+htmlcov/
 lib/
 lib64/
 parts/
+pass.sh
 sdist/
 var/
 wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Kubernetes/Minio
-/workspace/state/
-/workspace/audit.jsonl
-/workspace/inbox.jsonl
-/workspace/outbox.jsonl
-
-# Temporary
-pass.sh
-
-# macOS
-.DS_Store
-
-# macOS
-.DS_Store
