@@ -68,3 +68,27 @@ Most people see agents as chatbots with tools. I see them as workloads that need
 If Kubernetes can reconcile a fleet of machines into a desired state, we can use those same principles to reconcile a fleet of agents into something safer, more coherent, and more real.
 
 The beta is running. The proof is in the logs.
+
+---
+
+## Beta (Proof Milestone)
+
+Rynxs v1.0.0-beta.1 proves a simple but hard thing:
+
+**Agents can run “computer actions” safely on Kubernetes.**
+
+- Risky tools execute as **isolated Kubernetes Jobs (sandbox)** — not inside the agent pod.
+- Network is **default-deny** (egress allowlists only).
+- Every action is recorded in an **append-only, SHA-256 hashed audit trail**.
+- The control plane emits deterministic signals (**zones / jitter drift / sleep snapshots / luck events**).
+
+Repo: https://github.com/Uhudsavasindankacanokcu2/rynxs-agentos  
+Release: https://github.com/Uhudsavasindankacanokcu2/rynxs-agentos/releases/tag/v1.0.0-beta.1  
+Roadmap: https://github.com/Uhudsavasindankacanokcu2/rynxs-agentos/blob/main/ROADMAP.md  
+
+### Help wanted
+Highest-impact contributions:
+- stronger sandbox isolation (gVisor/Kata RuntimeClass profiles)
+- policy templates (Gatekeeper/Kyverno)
+- provider adapters + streaming
+- audit ingestion to immutable storage / SIEM
