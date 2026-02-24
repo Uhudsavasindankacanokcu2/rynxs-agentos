@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/hero-banner.png" width="800" alt="Rynxs Hero Banner">
+  <img src="assets/official-banner.jpg" width="800" alt="Rynxs Official Banner">
 </p>
 
 <p align="center">
@@ -19,15 +19,6 @@ Rather than a simple multi-worker queue, Rynxs treats agent behavior as a govern
 
 ---
 
-## Visual Evidence
-
-<p align="center">
-  <img src="assets/terminal-demo.png" width="800" alt="Rynxs Terminal Demo">
-  <br>
-  <i>Figure 1: Sandbox Job execution and immutable audit trail verification.</i>
-</p>
-
----
 
 ## Technical Pillars
 
