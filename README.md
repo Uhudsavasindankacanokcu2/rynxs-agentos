@@ -56,8 +56,8 @@ kubectl apply -f docs/examples/agent.yaml
 ### 2) Find the agent pod (namespace-agnostic)
 
 ```bash
-POD=$(kubectl get pods -A -l app=rynxs-agent -o jsonpath='{.items[0].metadata.name}')
-NS=$(kubectl get pods -A -l app=rynxs-agent -o jsonpath='{.items[0].metadata.namespace}')
+POD=$(kubectl get pods -A -l app=universe-agent -o jsonpath='{.items[0].metadata.name}')
+NS=$(kubectl get pods -A -l app=universe-agent -o jsonpath='{.items[0].metadata.namespace}')
 echo "Agent pod: $NS/$POD"
 ```
 

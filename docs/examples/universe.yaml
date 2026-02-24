@@ -2,7 +2,6 @@ apiVersion: universe.ai/v1alpha1
 kind: Universe
 metadata:
   name: u0
-  namespace: universe
 spec:
   storage:
     bucket:
