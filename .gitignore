@@ -39,3 +39,6 @@ htmlcov/
 
 # Temporary
 pass.sh
+
+# macOS
+.DS_Store
