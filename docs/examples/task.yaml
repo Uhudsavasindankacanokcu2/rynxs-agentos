@@ -1,0 +1,22 @@
+apiVersion: universe.ai/v1alpha1
+kind: Task
+metadata:
+  name: analyze-sales-q4
+  namespace: universe
+spec:
+  title: "Q4 Sales Analysis"
+  description: "Analyze Q4 sales data and generate report with trends and forecasts"
+  priority: high
+  deadline: "2024-12-31T23:59:59Z"
+  requiredTools:
+    - "fs.read"
+    - "fs.write"
+    - "sandbox.shell"
+  zone: "analytics"
+  input:
+    dataPath: "/workspace/data/sales-q4.csv"
+    outputPath: "/workspace/reports/sales-q4-analysis.pdf"
+    metrics:
+      - "total_revenue"
+      - "growth_rate"
+      - "top_products"

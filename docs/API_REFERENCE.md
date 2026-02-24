@@ -295,6 +295,148 @@ travel:
 
 Universe status is currently not actively managed by the operator.
 
+## Task CRD
+
+API Group: `universe.ai/v1alpha1`
+Kind: `Task`
+Scope: `Namespaced`
+
+### Spec Fields
+
+#### title
+
+Short task title (required).
+
+```yaml
+spec:
+  title: "Q4 Sales Analysis"
+```
+
+#### description
+
+Detailed task description (required).
+
+```yaml
+spec:
+  description: "Analyze Q4 sales data and generate comprehensive report with trends and forecasts"
+```
+
+#### assignee
+
+Agent name to assign task to. If not specified, operator auto-assigns.
+
+```yaml
+spec:
+  assignee: agent-analyst
+```
+
+#### priority
+
+Task priority level. Default: `normal`.
+
+```yaml
+spec:
+  priority: high  # low, normal, high, critical
+```
+
+#### deadline
+
+Task deadline in ISO 8601 format.
+
+```yaml
+spec:
+  deadline: "2024-12-31T23:59:59Z"
+```
+
+#### requiredTools
+
+List of tools the agent must have access to.
+
+```yaml
+spec:
+  requiredTools:
+    - "fs.read"
+    - "fs.write"
+    - "sandbox.shell"
+```
+
+#### zone
+
+Zone/department the task belongs to. Used for agent matching.
+
+```yaml
+spec:
+  zone: "analytics"
+```
+
+#### dependencies
+
+List of task names that must complete before this task starts.
+
+```yaml
+spec:
+  dependencies:
+    - data-collection
+    - data-cleaning
+```
+
+#### input
+
+Structured input data for the task.
+
+```yaml
+spec:
+  input:
+    dataPath: "/workspace/data/sales.csv"
+    outputFormat: "pdf"
+    metrics:
+      - "total_revenue"
+      - "growth_rate"
+```
+
+### Status Fields
+
+#### phase
+
+Current task phase: `Pending`, `Assigned`, `InProgress`, `Completed`, `Failed`, `Cancelled`.
+
+#### assignedAgent
+
+Agent currently assigned to this task.
+
+#### startTime
+
+When task execution started (ISO 8601).
+
+#### completionTime
+
+When task completed or failed (ISO 8601).
+
+#### attempts
+
+Number of execution attempts.
+
+#### result
+
+Task execution result (arbitrary JSON object).
+
+```yaml
+status:
+  result:
+    total_revenue: 1500000
+    growth_rate: 15.3
+    report_path: "/workspace/reports/sales-q4.pdf"
+```
+
+#### error
+
+Error message if task failed.
+
+```yaml
+status:
+  error: "Tool execution failed: permission denied"
+```
+
 ## Session CRD
 
 API Group: `universe.ai/v1alpha1`
