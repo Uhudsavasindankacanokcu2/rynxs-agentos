@@ -54,6 +54,7 @@ kubectl apply -f docs/examples/agent.yaml
 ```
 
 ### 2) Find the agent pod (namespace-agnostic)
+
 ```bash
 POD=$(kubectl get pods -A -l app=rynxs-agent -o jsonpath='{.items[0].metadata.name}')
 NS=$(kubectl get pods -A -l app=rynxs-agent -o jsonpath='{.items[0].metadata.namespace}')
@@ -61,12 +62,14 @@ echo "Agent pod: $NS/$POD"
 ```
 
 ### 3) Send a task (via workspace inbox)
+
 ```bash
 kubectl exec -n "$NS" "$POD" -- sh -lc 'echo "{\"text\":\"run uname -a in sandbox\"}" >> /workspace/inbox.jsonl'
 kubectl logs -n "$NS" "$POD" -f
 ```
 
 ### 4) Proof: sandbox job + audit + outbox
+
 ```bash
 kubectl get jobs -n "$NS" | grep sandbox-shell || true
 kubectl exec -n "$NS" "$POD" -- sh -lc 'tail -n 3 /workspace/audit.jsonl'
