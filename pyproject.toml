@@ -44,7 +44,7 @@ cli = [
 engine = "engine.cli.main:cli"
 
 [tool.setuptools]
-packages = ["engine", "engine.core", "engine.log", "engine.checkpoint", "engine.replay", "engine.cli", "engine.tests"]
+packages = ["engine", "engine.core", "engine.log", "engine.checkpoint", "engine.replay", "engine.cli", "engine.tests", "engine.verify"]
 
 [tool.pytest.ini_options]
 testpaths = ["engine/tests"]

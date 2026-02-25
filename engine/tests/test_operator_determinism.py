@@ -21,9 +21,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../'))
 from engine.core import Event, State, Reducer
 from engine.core.canonical import canonical_json_bytes
 from engine.log import FileEventStore
+from engine.log.integrity import hash_event, ZERO_HASH
 from engine.replay import replay as replay_events
 from engine.core.clock import DeterministicClock
 from engine.core.canonical import canonical_json_str
+from engine.verify import verify_actions_decided_pointers
 
 # Import operator components (avoid name conflict with Python's operator module)
 import importlib.util
@@ -427,44 +429,92 @@ def test_golden_log_fixture_replay():
     ), f"Golden fixture hash mismatch: {state_hash} != {expected_hash}"
     print("  ✓ Golden fixture hash matches")
 
-
-def test_actions_decided_pointer_integrity():
+def test_golden_log_weird_fixture_replay():
     """
-    Test G: ActionsDecided pointer integrity.
+    Test G: Weird fixture replay determinism.
 
-    trigger_event_hash must match the referenced event hash.
+    Replay of weird fixture log must yield the expected state hash.
     """
-    print("\nTest G: ActionsDecided pointer integrity")
+    print("\nTest G: Weird fixture replay")
 
+    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_weird.jsonl"
+    expected_hash = "228a0f4184447c46566e3d2225c16cbe4048d8bca2e11f34d07addf94289c268"
+
+    reducer = Reducer(global_aggregate_id=UNIVERSE_AGG_ID)
+    register_handlers(reducer)
+
+    store = FileEventStore(str(fixture_path))
+    replay_result = replay_events(store, reducer)
+
+    state_hash = _state_hash(replay_result.state)
+    assert (
+        state_hash == expected_hash
+    ), f"Weird fixture hash mismatch: {state_hash} != {expected_hash}"
+    print("  ✓ Weird fixture hash matches")
+
+
+def _tamper_pointer_fixture(src_path: Path, dst_path: Path) -> None:
+    records = []
+    tampered = False
+    with src_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            rec = json.loads(line)
+            ev = rec.get("event", {})
+            if ev.get("type") == "ActionsDecided" and not tampered:
+                payload = ev.get("payload", {})
+                payload["trigger_event_hash"] = "0" * 64
+                ev["payload"] = payload
+                rec["event"] = ev
+                tampered = True
+            records.append(rec)
+
+    prev_hash = ZERO_HASH
+    for rec in records:
+        ev = rec.get("event", {})
+        event_obj = Event(
+            type=ev.get("type"),
+            aggregate_id=ev.get("aggregate_id"),
+            seq=ev.get("seq"),
+            ts=ev.get("ts"),
+            payload=ev.get("payload", {}),
+            meta=ev.get("meta", {}),
+        )
+        rec["prev_hash"] = prev_hash
+        rec["event_hash"] = hash_event(prev_hash, event_obj)
+        prev_hash = rec["event_hash"]
+
+    with dst_path.open("w", encoding="utf-8") as f:
+        for rec in records:
+            f.write(json.dumps(rec) + "\n")
+
+
+def test_verify_actions_decided_pointers_pass():
+    """
+    Test H: Pointer verification passes on small fixture.
+    """
+    print("\nTest H: Pointer verification (pass)")
     fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
-    seq_to_hash = {}
+    result = verify_actions_decided_pointers(str(fixture_path))
+    assert result.valid
+    assert result.checked > 0
+    print("  ✓ Pointer verification passed")
 
-    with fixture_path.open("r", encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            rec = json.loads(line)
-            ev = rec.get("event", {})
-            seq = ev.get("seq")
-            seq_to_hash[seq] = rec.get("event_hash")
 
-    with fixture_path.open("r", encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            rec = json.loads(line)
-            ev = rec.get("event", {})
-            if ev.get("type") != "ActionsDecided":
-                continue
-            payload = ev.get("payload", {})
-            trigger_seq = payload.get("trigger_event_seq")
-            trigger_hash = payload.get("trigger_event_hash")
-            assert trigger_hash == seq_to_hash.get(trigger_seq), (
-                f"Pointer mismatch: seq={trigger_seq} "
-                f"expected={seq_to_hash.get(trigger_seq)} got={trigger_hash}"
-            )
-
-    print("  ✓ ActionsDecided pointers validated")
+def test_verify_actions_decided_pointers_fail():
+    """
+    Test I: Pointer verification fails on tampered fixture.
+    """
+    print("\nTest I: Pointer verification (fail)")
+    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dst = Path(tmpdir) / "tampered.jsonl"
+        _tamper_pointer_fixture(fixture_path, dst)
+        result = verify_actions_decided_pointers(str(dst))
+        assert not result.valid
+        assert result.error == "trigger_event_hash mismatch"
+    print("  ✓ Pointer verification failed as expected")
 
 
 if __name__ == "__main__":
@@ -478,7 +528,9 @@ if __name__ == "__main__":
     test_event_translation_defaulting_equivalence()
     test_real_state_replay_equivalence()
     test_golden_log_fixture_replay()
-    test_actions_decided_pointer_integrity()
+    test_golden_log_weird_fixture_replay()
+    test_verify_actions_decided_pointers_pass()
+    test_verify_actions_decided_pointers_fail()
 
     print("\n" + "=" * 60)
     print("ALL DETERMINISM TESTS PASSED")
