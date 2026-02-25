@@ -10,10 +10,10 @@ metadata:
   name: rynxs-operator-role
 rules:
   - apiGroups: ["universe.ai"]
-    resources: ["agents", "sessions", "universes", "tasks"]
+    resources: ["agents", "sessions", "universes", "tasks", "teams", "messages", "metrics"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["universe.ai"]
-    resources: ["agents/status", "sessions/status", "universes/status", "tasks/status"]
+    resources: ["agents/status", "sessions/status", "universes/status", "tasks/status", "teams/status", "messages/status", "metrics/status"]
     verbs: ["get", "update", "patch"]
   - apiGroups: [""]
     resources: ["pods", "services", "configmaps", "persistentvolumeclaims", "events"]
