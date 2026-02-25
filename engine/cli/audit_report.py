@@ -5,6 +5,7 @@ Generate an audit report from the event log.
 import argparse
 import json
 import sys
+import hashlib
 from collections import Counter
 from pathlib import Path
 from typing import Dict, Any, List
@@ -23,6 +24,7 @@ from engine.core.state import UniverseState
 
 from engine.log.integrity import hash_event, ZERO_HASH
 from engine.core.events import Event
+from engine.core.canonical import canonical_json_bytes
 
 import importlib.util
 
@@ -122,6 +124,7 @@ def _decision_summary(log_path: str) -> Dict[str, Any]:
     action_type_counts = Counter()
     applied = set()
     failed = set()
+    actions_total = 0
 
     with open(log_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -134,6 +137,7 @@ def _decision_summary(log_path: str) -> Dict[str, Any]:
 
             if etype == "ActionsDecided":
                 actions_decided.append(payload)
+                actions_total += len(payload.get("action_ids", []))
                 for a in payload.get("actions", []):
                     action_type_counts[a.get("action_type")] += 1
             elif etype == "ActionApplied":
@@ -158,7 +162,11 @@ def _decision_summary(log_path: str) -> Dict[str, Any]:
             {
                 "trigger_event_seq": payload.get("trigger_event_seq"),
                 "trigger_event_hash": payload.get("trigger_event_hash"),
+                "trigger_event_type": payload.get("trigger_event_type"),
+                "trigger_spec_hash": payload.get("trigger_spec_hash"),
                 "actions_hash": payload.get("actions_hash"),
+                "action_ids": payload.get("action_ids", []),
+                "action_sample": (payload.get("actions") or [None])[0],
                 "status": status,
             }
         )
@@ -167,7 +175,13 @@ def _decision_summary(log_path: str) -> Dict[str, Any]:
         "actions_decided_count": len(actions_decided),
         "action_type_counts": dict(action_type_counts),
         "decision_proofs": proofs,
+        "actions_total": actions_total,
     }
+
+
+def _state_hash_final(state) -> str:
+    data = {"version": state.version, "aggregates": state.aggregates}
+    return hashlib.sha256(canonical_json_bytes(data)).hexdigest()
 
 
 def _drift_summary(log_path: str) -> Dict[str, Any]:
@@ -200,9 +214,44 @@ def _drift_summary(log_path: str) -> Dict[str, Any]:
 
     return {
         "agents": agents,
+        "agents_count": len(agents),
         "drift_count": drift_count,
         "drift": drift,
         "failure_codes": dict(failure_codes),
+        "state_hash_final": _state_hash_final(state),
+    }
+
+
+def _log_stats(log_path: str) -> Dict[str, Any]:
+    total = 0
+    first_seq = None
+    last_seq = None
+    applied_ok = 0
+    applied_failed = 0
+
+    with open(log_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            rec = json.loads(line)
+            ev = rec.get("event", {})
+            seq = ev.get("seq")
+            if first_seq is None:
+                first_seq = seq
+            last_seq = seq
+            total += 1
+            etype = ev.get("type")
+            if etype == "ActionApplied":
+                applied_ok += 1
+            elif etype == "ActionFailed":
+                applied_failed += 1
+
+    return {
+        "events_total": total,
+        "first_seq": first_seq,
+        "last_seq": last_seq,
+        "applied_ok": applied_ok,
+        "applied_failed": applied_failed,
     }
 
 
@@ -269,26 +318,80 @@ def _format_markdown(report: Dict[str, Any]) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate audit report from event log.")
     parser.add_argument("--log", required=True, help="Path to JSONL event log")
-    parser.add_argument("--format", default="json", choices=["json", "md"])
+    parser.add_argument("--format", default="json", choices=["json", "md", "text"])
     parser.add_argument("--out", help="Output file path")
     parser.add_argument("--checkpoints-dir", help="Directory with checkpoints")
     parser.add_argument("--pubkey", help="Public key PEM for signature verification")
+    parser.add_argument("--summary", action="store_true", help="Emit compact summary")
     args = parser.parse_args()
 
-    report = {
-        "hash_chain": _hash_chain_verify(args.log),
-        "pointers": verify_actions_decided_pointers(args.log).__dict__,
-        "checkpoint": _load_checkpoint_summary(args.checkpoints_dir, args.pubkey)
+    hash_chain = _hash_chain_verify(args.log)
+    pointers = verify_actions_decided_pointers(args.log).__dict__
+    decisions = _decision_summary(args.log)
+    drift = _drift_summary(args.log)
+    log_stats = _log_stats(args.log)
+    checkpoint = (
+        _load_checkpoint_summary(args.checkpoints_dir, args.pubkey)
         if args.checkpoints_dir
-        else {"present": False},
-        "decisions": _decision_summary(args.log),
-        "drift": _drift_summary(args.log),
+        else {"present": False}
+    )
+
+    report = {
+        "hash_chain": hash_chain,
+        "pointers": pointers,
+        "checkpoint": checkpoint,
+        "decisions": decisions,
+        "drift": drift,
+        "log": log_stats,
+        "state_hash_final": drift.get("state_hash_final"),
+        "universe_id": UNIVERSE_AGG_ID,
     }
 
-    if args.format == "md":
-        output = _format_markdown(report)
+    if args.summary:
+        integrity_ok = bool(hash_chain.get("valid")) and bool(pointers.get("valid"))
+        integrity_reason = None
+        if not integrity_ok:
+            integrity_reason = hash_chain.get("error") or pointers.get("error")
+
+        summary = {
+            "universe_id": UNIVERSE_AGG_ID,
+            "agents_count": drift.get("agents_count"),
+            "events_total": log_stats.get("events_total"),
+            "actions_total": decisions.get("actions_total"),
+            "applied_ok": log_stats.get("applied_ok"),
+            "applied_failed": log_stats.get("applied_failed"),
+            "first_seq": log_stats.get("first_seq"),
+            "last_seq": log_stats.get("last_seq"),
+            "state_hash_final": drift.get("state_hash_final"),
+            "decision_proofs": len(decisions.get("decision_proofs", [])),
+            "integrity": "ok" if integrity_ok else "fail",
+            "integrity_reason": integrity_reason,
+        }
+
+        if args.format == "text":
+            lines = [
+                f"universe_id: {summary['universe_id']}",
+                f"agents_count: {summary['agents_count']}",
+                f"events_total: {summary['events_total']}",
+                f"actions_total: {summary['actions_total']}",
+                f"applied_ok: {summary['applied_ok']}",
+                f"applied_failed: {summary['applied_failed']}",
+                f"first_seq: {summary['first_seq']}",
+                f"last_seq: {summary['last_seq']}",
+                f"state_hash_final: {summary['state_hash_final']}",
+                f"decision_proofs: {summary['decision_proofs']}",
+                f"integrity: {summary['integrity']}",
+            ]
+            if summary["integrity_reason"]:
+                lines.append(f"integrity_reason: {summary['integrity_reason']}")
+            output = "\n".join(lines)
+        else:
+            output = json.dumps(summary, sort_keys=True, indent=2)
     else:
-        output = json.dumps(report, sort_keys=True, indent=2)
+        if args.format == "md":
+            output = _format_markdown(report)
+        else:
+            output = json.dumps(report, sort_keys=True, indent=2)
 
     if args.out:
         Path(args.out).write_text(output, encoding="utf-8")

@@ -24,18 +24,24 @@ run_py() {
   return 1
 }
 
-out="$("$ROOT/scripts/engine_cli.sh" inspect --log "$LOG")"
-run_py python3 - <<PY
-import json, sys
-data = json.loads("""$out""")
+tmp_out="$(mktemp "$TMPDIR/rynxs-smokeout.XXXXXX")"
+"$ROOT/scripts/engine_cli.sh" inspect --log "$LOG" > "$tmp_out"
+OUT_FILE="$tmp_out" run_py python3 - <<'PY'
+import json, os
+with open(os.environ["OUT_FILE"], "r", encoding="utf-8") as f:
+    data = json.load(f)
 assert "agents" in data and "applied_events" in data
 print("inspect ok")
 PY
+rm -f "$tmp_out"
 
-out="$("$ROOT/scripts/engine_cli.sh" audit_report --log "$LOG" --format json)"
-run_py python3 - <<PY
-import json, sys
-data = json.loads("""$out""")
+tmp_out="$(mktemp "$TMPDIR/rynxs-smokeout.XXXXXX")"
+"$ROOT/scripts/engine_cli.sh" audit_report --log "$LOG" --format json > "$tmp_out"
+OUT_FILE="$tmp_out" run_py python3 - <<'PY'
+import json, os
+with open(os.environ["OUT_FILE"], "r", encoding="utf-8") as f:
+    data = json.load(f)
 assert "hash_chain" in data and "pointers" in data and "decisions" in data
 print("audit_report ok")
 PY
+rm -f "$tmp_out"

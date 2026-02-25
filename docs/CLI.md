@@ -56,6 +56,44 @@ Verify ActionsDecided pointers against hash-chain.
 scripts/engine_cli.sh verify_pointers --log /path/to/operator-events.log
 ```
 
+## Decision Proof (Minimal)
+
+Below is a minimal proof chain extracted from the small fixture log:
+
+```json
+{
+  "trigger_event": {
+    "seq": 0,
+    "hash": "9cc66c44bd92206c343d41160092104dfda71582f36006ee1865e95052e8fc3b",
+    "type": "AgentObserved",
+    "spec_hash": "78fc19249e2d835a"
+  },
+  "actions_hash": "b5df8601f452c39a7f1e66d979d53ff0ef61b5f7b7501290a586662fe4f5792c",
+  "action_ids": [
+    "02e2a276c672424e1aa0f575fff03cc35568b37dd0c38021e3d415608ba44f79",
+    "698c64c870c510a1a285b989bc3010f209155c14c20b97f10a7c0ebae7037a33"
+  ],
+  "action_sample": {
+    "action_type": "EnsureConfigMap",
+    "target": "universe/agent-000-spec",
+    "params": {
+      "name": "agent-000-spec",
+      "namespace": "universe",
+      "data": {
+        "agent.json": "{\"image\":{\"repository\":\"ghcr.io/test/agent\",\"tag\":\"v1.0.0\",\"verify\":false},\"permissions\":{\"canAccessAuditLogs\":false,\"canAssignTasks\":false,\"canManageTeam\":false},\"role\":\"worker\",\"team\":\"backend-team\",\"workspace\":{\"size\":\"1Gi\"}}"
+      }
+    }
+  },
+  "state_hash_final": "6a2d25ae69313ebf7eaa4ce0ef9658b4a6aee6165e2a15edd6b0b6e20b4a4b29"
+}
+```
+
+This snippet shows:
+- The exact trigger event (seq/hash/type/spec_hash)
+- The decision hash (actions_hash)
+- Concrete action identifiers and a canonical action example
+- The final replayed state hash (audit_report summary)
+
 ## Examples
 
 ### Fixture log
