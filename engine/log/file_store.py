@@ -150,3 +150,17 @@ class FileEventStore(EventStore):
                     payload=ev.get("payload", {}),
                     meta=ev.get("meta", {}),
                 )
+
+    def get_event_hash(self, seq: int) -> Optional[str]:
+        """
+        Return event_hash for a given seq.
+        """
+        with open(self.path, "rb") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                rec = json.loads(line)
+                ev = rec.get("event", {})
+                if ev.get("seq") == seq:
+                    return rec.get("event_hash")
+        return None

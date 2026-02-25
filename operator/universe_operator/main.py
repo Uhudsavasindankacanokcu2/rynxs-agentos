@@ -57,6 +57,11 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
         logger.error(f"Failed to append event: {e}")
         raise
 
+    # Capture trigger event hash for decision ledger
+    trigger_event_hash = event_store.get_event_hash(event_stored.seq)
+    if not trigger_event_hash:
+        raise ValueError(f"Missing event_hash for seq={event_stored.seq}")
+
     # Step 3: Replay to get current state (deterministic)
     try:
         replay_result = replay(event_store, reducer)
@@ -86,6 +91,9 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
             payload={
                 "agent_id": event_stored.aggregate_id,
                 "trigger_event_seq": event_stored.seq,
+                "trigger_event_hash": trigger_event_hash,
+                "trigger_event_type": event_stored.type,
+                "trigger_spec_hash": event_stored.payload.get("spec_hash"),
                 "actions": actions_canonical,
                 "actions_hash": actions_hash,
                 "action_ids": [action_id(a) for a in actions],

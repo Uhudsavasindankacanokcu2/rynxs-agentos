@@ -22,6 +22,7 @@
 - [ ] Replay tests run
 - [ ] Integrity tests run
 - [ ] Relevant unit tests updated
+- [ ] Determinism gate run: `scripts/determinism_gate.sh`
 
 ## Release Hygiene
 - [ ] Release notes written (use `docs/RELEASE_NOTES_TEMPLATE.md`)

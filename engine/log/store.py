@@ -48,3 +48,11 @@ class EventStore(ABC):
             Events in sequence order
         """
         ...
+
+    def get_event_hash(self, seq: int) -> Optional[str]:
+        """
+        Return event_hash for a given sequence number if available.
+
+        Implementations may override. Default returns None.
+        """
+        return None

@@ -12,6 +12,7 @@ import sys
 import os
 import tempfile
 import hashlib
+import json
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
@@ -167,6 +168,7 @@ def test_replay_equality():
             live_decisions.append(canonical_json_str(actions_canonical))
 
             # Append ActionsDecided event
+            trigger_event_hash = store.get_event_hash(event_stored.seq)
             actions_hash = hashlib.sha256(
                 canonical_json_str(actions_canonical).encode("utf-8")
             ).hexdigest()
@@ -177,6 +179,9 @@ def test_replay_equality():
                 payload={
                     "agent_id": event_stored.aggregate_id,
                     "trigger_event_seq": event_stored.seq,
+                    "trigger_event_hash": trigger_event_hash,
+                    "trigger_event_type": event_stored.type,
+                    "trigger_spec_hash": event_stored.payload.get("spec_hash"),
                     "actions": actions_canonical,
                     "actions_hash": actions_hash,
                     "action_ids": [action_id(a) for a in actions],
@@ -348,6 +353,7 @@ def test_real_state_replay_equivalence():
             actions = decision_layer.decide(state_live, event_stored)
             actions_canonical = actions_to_canonical(actions)
             ts += 1
+            trigger_event_hash = store.get_event_hash(event_stored.seq)
             actions_hash = hashlib.sha256(
                 canonical_json_str(actions_canonical).encode("utf-8")
             ).hexdigest()
@@ -358,6 +364,9 @@ def test_real_state_replay_equivalence():
                 payload={
                     "agent_id": event_stored.aggregate_id,
                     "trigger_event_seq": event_stored.seq,
+                    "trigger_event_hash": trigger_event_hash,
+                    "trigger_event_type": event_stored.type,
+                    "trigger_spec_hash": event_stored.payload.get("spec_hash"),
                     "actions": actions_canonical,
                     "actions_hash": actions_hash,
                     "action_ids": [action_id(a) for a in actions],
@@ -402,7 +411,7 @@ def test_golden_log_fixture_replay():
     print("\nTest F: Golden fixture replay")
 
     fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
-    expected_hash = "c3296addee7f05309ce5677c93ab909428405457422e9a7c9ed44bd0e09abeef"
+    expected_hash = "6a2d25ae69313ebf7eaa4ce0ef9658b4a6aee6165e2a15edd6b0b6e20b4a4b29"
 
     reducer = Reducer(global_aggregate_id=UNIVERSE_AGG_ID)
     register_handlers(reducer)
@@ -417,6 +426,45 @@ def test_golden_log_fixture_replay():
     print("  ✓ Golden fixture hash matches")
 
 
+def test_actions_decided_pointer_integrity():
+    """
+    Test G: ActionsDecided pointer integrity.
+
+    trigger_event_hash must match the referenced event hash.
+    """
+    print("\nTest G: ActionsDecided pointer integrity")
+
+    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
+    seq_to_hash = {}
+
+    with fixture_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            rec = json.loads(line)
+            ev = rec.get("event", {})
+            seq = ev.get("seq")
+            seq_to_hash[seq] = rec.get("event_hash")
+
+    with fixture_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            rec = json.loads(line)
+            ev = rec.get("event", {})
+            if ev.get("type") != "ActionsDecided":
+                continue
+            payload = ev.get("payload", {})
+            trigger_seq = payload.get("trigger_event_seq")
+            trigger_hash = payload.get("trigger_event_hash")
+            assert trigger_hash == seq_to_hash.get(trigger_seq), (
+                f"Pointer mismatch: seq={trigger_seq} "
+                f"expected={seq_to_hash.get(trigger_seq)} got={trigger_hash}"
+            )
+
+    print("  ✓ ActionsDecided pointers validated")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("OPERATOR DETERMINISM TESTS (SPRINT C)")
@@ -428,6 +476,7 @@ if __name__ == "__main__":
     test_event_translation_defaulting_equivalence()
     test_real_state_replay_equivalence()
     test_golden_log_fixture_replay()
+    test_actions_decided_pointer_integrity()
 
     print("\n" + "=" * 60)
     print("ALL DETERMINISM TESTS PASSED")

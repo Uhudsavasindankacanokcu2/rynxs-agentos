@@ -77,6 +77,10 @@ def on_actions_decided(cur, ev: Event) -> Dict[str, Any]:
     agent_id = payload.get("agent_id") or ev.aggregate_id
     actions = payload.get("actions", [])
     actions_hash = payload.get("actions_hash")
+    trigger_event_hash = payload.get("trigger_event_hash")
+    trigger_event_type = payload.get("trigger_event_type")
+    trigger_spec_hash = payload.get("trigger_spec_hash")
+    trigger_event_seq = payload.get("trigger_event_seq")
 
     action_map = {}
     for a in actions:
@@ -91,6 +95,10 @@ def on_actions_decided(cur, ev: Event) -> Dict[str, Any]:
     desired[agent_id] = {
         "actions": action_map,
         "actions_hash": actions_hash,
+        "trigger_event_hash": trigger_event_hash,
+        "trigger_event_type": trigger_event_type,
+        "trigger_spec_hash": trigger_spec_hash,
+        "trigger_event_seq": trigger_event_seq,
     }
 
     next_state = UniverseState(
