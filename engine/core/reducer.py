@@ -7,7 +7,7 @@ The reducer is the heart of deterministic execution. It must be:
 - Idempotent (applying same event twice is safe)
 """
 
-from typing import Callable, Dict, Any
+from typing import Callable, Dict, Any, Optional
 from .events import Event
 from .state import State
 from .errors import InvalidTransitionError
@@ -26,8 +26,9 @@ class Reducer:
         new_state = reducer.apply(state, event)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, global_aggregate_id: Optional[str] = None) -> None:
         self._handlers: Dict[str, Handler] = {}
+        self._global_aggregate_id = global_aggregate_id
 
     def register(self, event_type: str, handler: Handler) -> None:
         """
@@ -56,6 +57,7 @@ class Reducer:
         if event.type not in self._handlers:
             raise InvalidTransitionError(f"No handler for event type: {event.type}")
 
-        current = state.get_agg(event.aggregate_id)
+        agg_id = self._global_aggregate_id or event.aggregate_id
+        current = state.get_agg(agg_id)
         new_agg_state = self._handlers[event.type](current, event)
-        return state.with_agg(event.aggregate_id, new_agg_state)
+        return state.with_agg(agg_id, new_agg_state)

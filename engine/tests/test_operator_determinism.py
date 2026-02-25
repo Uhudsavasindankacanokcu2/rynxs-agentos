@@ -11,11 +11,14 @@ These tests prove the operator is deterministic and replayable.
 import sys
 import os
 import tempfile
+import hashlib
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../'))
 
 from engine.core import Event, State, Reducer
+from engine.core.canonical import canonical_json_bytes
 from engine.log import FileEventStore
 from engine.replay import replay as replay_events
 from engine.core.clock import DeterministicClock
@@ -36,6 +39,19 @@ decision_spec.loader.exec_module(decision_module)
 
 EngineAdapter = adapter_module.EngineAdapter
 DecisionLayer = decision_module.DecisionLayer
+actions_to_canonical = decision_module.actions_to_canonical
+action_id = decision_module.action_id
+
+handlers_spec = importlib.util.spec_from_file_location("reducer_handlers", f"{operator_path}/reducer_handlers.py")
+handlers_module = importlib.util.module_from_spec(handlers_spec)
+handlers_spec.loader.exec_module(handlers_module)
+register_handlers = handlers_module.register_handlers
+UNIVERSE_AGG_ID = handlers_module.UNIVERSE_AGG_ID
+
+
+def _state_hash(state: State) -> str:
+    data = {"version": state.version, "aggregates": state.aggregates}
+    return hashlib.sha256(canonical_json_bytes(data)).hexdigest()
 
 
 def test_decision_determinism_50_runs():
@@ -117,16 +133,8 @@ def test_replay_equality():
         clock = DeterministicClock(current=0)
         adapter = EngineAdapter(clock)
         decision_layer = DecisionLayer()
-        reducer = Reducer()
-
-        # Register dummy handler for AgentObserved (MVP)
-        def handle_agent_observed(cur, ev):
-            # For MVP, just track that we saw this agent
-            cur = cur or {}
-            cur[ev.payload["name"]] = ev.payload.get("spec_hash", "")
-            return cur
-
-        reducer.register("AgentObserved", handle_agent_observed)
+        reducer = Reducer(global_aggregate_id=UNIVERSE_AGG_ID)
+        register_handlers(reducer)
 
         # Simulate 10 agent observations
         print("  Simulating 10 agent observations...")
@@ -155,17 +163,26 @@ def test_replay_equality():
 
             # Decide actions (LIVE)
             actions = decision_layer.decide(state, event_stored)
+            actions_canonical = actions_to_canonical(actions)
+            live_decisions.append(canonical_json_str(actions_canonical))
 
-            # Record decision
-            actions_dict = [
-                {
-                    "action_type": a.action_type,
-                    "target": a.target,
-                    "params": a.params,
-                }
-                for a in actions
-            ]
-            live_decisions.append(canonical_json_str(actions_dict))
+            # Append ActionsDecided event
+            actions_hash = hashlib.sha256(
+                canonical_json_str(actions_canonical).encode("utf-8")
+            ).hexdigest()
+            decision_event = Event(
+                type="ActionsDecided",
+                aggregate_id=event_stored.aggregate_id,
+                ts=1000 + i,
+                payload={
+                    "agent_id": event_stored.aggregate_id,
+                    "trigger_event_seq": event_stored.seq,
+                    "actions": actions_canonical,
+                    "actions_hash": actions_hash,
+                    "action_ids": [action_id(a) for a in actions],
+                },
+            )
+            store.append(decision_event)
 
         print(f"  Live run: {len(live_decisions)} decisions made")
 
@@ -182,17 +199,8 @@ def test_replay_equality():
 
             # Decide actions (REPLAY)
             actions = decision_layer.decide(state, event_stored)
-
-            # Record decision
-            actions_dict = [
-                {
-                    "action_type": a.action_type,
-                    "target": a.target,
-                    "params": a.params,
-                }
-                for a in actions
-            ]
-            replay_decisions.append(canonical_json_str(actions_dict))
+            actions_canonical = actions_to_canonical(actions)
+            replay_decisions.append(canonical_json_str(actions_canonical))
 
         print(f"  Replay run: {len(replay_decisions)} decisions made")
 
@@ -298,6 +306,117 @@ def test_event_translation_defaulting_equivalence():
     print("  ✓ Implicit defaults == explicit defaults (payloads match)")
 
 
+def test_real_state_replay_equivalence():
+    """
+    Test E: Real state replay equivalence.
+
+    Live state evolution must equal replayed state.
+    """
+    print("\nTest E: Real state replay equivalence")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        log_path = os.path.join(tmpdir, "test.log")
+        store = FileEventStore(log_path)
+
+        clock = DeterministicClock(current=0)
+        adapter = EngineAdapter(clock)
+        decision_layer = DecisionLayer()
+
+        reducer = Reducer(global_aggregate_id=UNIVERSE_AGG_ID)
+        register_handlers(reducer)
+
+        state_live = State(version=0, aggregates={})
+        ts = 0
+
+        for i in range(5):
+            agent_spec = {
+                "role": "worker",
+                "team": "backend-team",
+                "permissions": {"canAssignTasks": False},
+                "image": {"repository": "ghcr.io/test/agent", "tag": "v1.0.0"},
+                "workspace": {"size": "1Gi"},
+            }
+
+            # AgentObserved
+            event = adapter.agent_to_event(
+                name=f"agent-{i:03d}", namespace="universe", spec=agent_spec
+            )
+            event_stored = store.append(event)
+            state_live = reducer.apply(state_live, event_stored)
+
+            # Decide + ActionsDecided
+            actions = decision_layer.decide(state_live, event_stored)
+            actions_canonical = actions_to_canonical(actions)
+            ts += 1
+            actions_hash = hashlib.sha256(
+                canonical_json_str(actions_canonical).encode("utf-8")
+            ).hexdigest()
+            decided = Event(
+                type="ActionsDecided",
+                aggregate_id=event_stored.aggregate_id,
+                ts=ts,
+                payload={
+                    "agent_id": event_stored.aggregate_id,
+                    "trigger_event_seq": event_stored.seq,
+                    "actions": actions_canonical,
+                    "actions_hash": actions_hash,
+                    "action_ids": [action_id(a) for a in actions],
+                },
+            )
+            decided_stored = store.append(decided)
+            state_live = reducer.apply(state_live, decided_stored)
+
+            # Simulate feedback (applied)
+            for action in actions:
+                ts += 1
+                feedback = Event(
+                    type="ActionApplied",
+                    aggregate_id=event_stored.aggregate_id,
+                    ts=ts,
+                    payload={
+                        "action_id": action_id(action),
+                        "action_type": action.action_type,
+                        "target": action.target,
+                        "result_code": "OK",
+                    },
+                )
+                feedback_stored = store.append(feedback)
+                state_live = reducer.apply(state_live, feedback_stored)
+
+        # Replay full log
+        replay_result = replay_events(store, reducer)
+
+        live_hash = _state_hash(state_live)
+        replay_hash = _state_hash(replay_result.state)
+
+        assert live_hash == replay_hash, "State hash mismatch (live vs replay)"
+    print("  ✓ Live state hash == replay state hash")
+
+
+def test_golden_log_fixture_replay():
+    """
+    Test F: Golden log fixture replay determinism.
+
+    Replay of fixture log must yield the expected state hash.
+    """
+    print("\nTest F: Golden fixture replay")
+
+    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
+    expected_hash = "c3296addee7f05309ce5677c93ab909428405457422e9a7c9ed44bd0e09abeef"
+
+    reducer = Reducer(global_aggregate_id=UNIVERSE_AGG_ID)
+    register_handlers(reducer)
+
+    store = FileEventStore(str(fixture_path))
+    replay_result = replay_events(store, reducer)
+
+    state_hash = _state_hash(replay_result.state)
+    assert (
+        state_hash == expected_hash
+    ), f"Golden fixture hash mismatch: {state_hash} != {expected_hash}"
+    print("  ✓ Golden fixture hash matches")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("OPERATOR DETERMINISM TESTS (SPRINT C)")
@@ -307,6 +426,8 @@ if __name__ == "__main__":
     test_replay_equality()
     test_event_translation_determinism()
     test_event_translation_defaulting_equivalence()
+    test_real_state_replay_equivalence()
+    test_golden_log_fixture_replay()
 
     print("\n" + "=" * 60)
     print("ALL DETERMINISM TESTS PASSED")

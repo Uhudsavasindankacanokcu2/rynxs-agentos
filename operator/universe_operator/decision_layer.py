@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
 
 from engine.core import State, Event
 from engine.core.canonical import canonical_json_str, canonicalize
+from engine.core.ids import stable_id
 
 
 @dataclass
@@ -25,6 +26,23 @@ class Action:
     action_type: str
     target: str  # namespace/name
     params: Dict[str, Any]
+
+
+def action_to_dict(action: Action) -> Dict[str, Any]:
+    return {
+        "action_type": action.action_type,
+        "target": action.target,
+        "params": canonicalize(action.params),
+    }
+
+
+def action_id(action: Action) -> str:
+    params_json = canonical_json_str(canonicalize(action.params))
+    return stable_id(action.action_type, action.target, params_json)
+
+
+def actions_to_canonical(actions: List[Action]) -> List[Dict[str, Any]]:
+    return [action_to_dict(a) for a in actions]
 
 
 @dataclass

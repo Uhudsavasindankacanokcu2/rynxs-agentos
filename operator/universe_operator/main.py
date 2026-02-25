@@ -15,8 +15,12 @@ from engine.core import Reducer
 from engine.core.clock import DeterministicClock
 from engine.replay import replay
 from .engine_adapter import EngineAdapter
-from .decision_layer import DecisionLayer
+from .decision_layer import DecisionLayer, actions_to_canonical, action_id
 from .executor_layer import ExecutorLayer
+from .reducer_handlers import register_handlers, UNIVERSE_AGG_ID
+from engine.core import Event
+from engine.core.canonical import canonical_json_str
+import hashlib
 
 # Initialize engine components (global for operator)
 event_store_path = os.getenv("EVENT_STORE_PATH", "/var/log/rynxs/operator-events.log")
@@ -24,7 +28,8 @@ event_store = FileEventStore(event_store_path)
 clock = DeterministicClock(current=0)
 adapter = EngineAdapter(clock)
 decision_layer = DecisionLayer()
-reducer = Reducer()  # TODO: Register event handlers
+reducer = Reducer(global_aggregate_id=UNIVERSE_AGG_ID)
+register_handlers(reducer)
 
 kubernetes.config.load_incluster_config()
 
@@ -67,6 +72,29 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
         logger.info(f"Decided {len(actions)} actions: {[a.action_type for a in actions]}")
     except Exception as e:
         logger.error(f"Decision layer failed: {e}")
+        raise
+
+    # Step 4.5: Log decision ledger (ActionsDecided)
+    try:
+        actions_canonical = actions_to_canonical(actions)
+        actions_json = canonical_json_str(actions_canonical)
+        actions_hash = hashlib.sha256(actions_json.encode("utf-8")).hexdigest()
+        decision_event = Event(
+            type="ActionsDecided",
+            aggregate_id=event_stored.aggregate_id,
+            ts=clock.now(),
+            payload={
+                "agent_id": event_stored.aggregate_id,
+                "trigger_event_seq": event_stored.seq,
+                "actions": actions_canonical,
+                "actions_hash": actions_hash,
+                "action_ids": [action_id(a) for a in actions],
+            },
+            meta={"source": "decision_layer"},
+        )
+        event_store.append(decision_event)
+    except Exception as e:
+        logger.error(f"Failed to log ActionsDecided: {e}")
         raise
 
     # Step 5: Execute actions (side effects)

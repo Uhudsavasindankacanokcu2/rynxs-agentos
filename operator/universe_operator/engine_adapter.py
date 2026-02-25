@@ -87,6 +87,7 @@ class EngineAdapter:
             "labels": normalized_labels,
             "spec": canonical_spec,
             "spec_hash": spec_hash,
+            "observed_logical_time": self.clock.now(),
         }
 
         # Aggregate ID: namespace/name (stable identifier)

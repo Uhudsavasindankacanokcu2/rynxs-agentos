@@ -20,7 +20,7 @@ from kubernetes import client
 from engine.log import EventStore
 from engine.core import Event
 from engine.core.clock import DeterministicClock
-from .decision_layer import Action
+from .decision_layer import Action, action_id
 
 
 class ExecutorLayer:
@@ -76,6 +76,7 @@ class ExecutorLayer:
         feedback_events = []
 
         for action in actions:
+            action_uid = action_id(action)
             try:
                 if action.action_type == "EnsureConfigMap":
                     self._ensure_config_map(action)
@@ -94,9 +95,11 @@ class ExecutorLayer:
                     aggregate_id=action.target,
                     ts=self.clock.tick().now(),
                     payload={
+                        "action_id": action_uid,
                         "action_type": action.action_type,
                         "target": action.target,
                         "status": "success",
+                        "result_code": "OK",
                     },
                     meta={"executor": "k8s"},
                 )
@@ -117,8 +120,10 @@ class ExecutorLayer:
                     aggregate_id=action.target,
                     ts=self.clock.tick().now(),
                     payload={
+                        "action_id": action_uid,
                         "action_type": action.action_type,
                         "target": action.target,
+                        "result_code": stable_error.get("code"),
                         "error": stable_error,
                     },
                     meta={"executor": "k8s"},
@@ -134,12 +139,30 @@ class ExecutorLayer:
 
         Avoids embedding raw exception strings or stack traces.
         """
-        base = {"type": err.__class__.__name__}
+        code = "UNKNOWN"
+        base = {"type": err.__class__.__name__, "code": code}
 
         # Kubernetes ApiException provides stable fields
         if isinstance(err, client.exceptions.ApiException):
-            base["status"] = getattr(err, "status", None)
-            base["reason"] = getattr(err, "reason", None)
+            status = getattr(err, "status", None)
+            reason = getattr(err, "reason", None)
+            base["status"] = status
+            base["reason"] = reason
+
+            if status == 404:
+                base["code"] = "K8S_NOT_FOUND"
+            elif status == 409:
+                base["code"] = "K8S_CONFLICT"
+            elif status == 403:
+                base["code"] = "K8S_FORBIDDEN"
+            elif status == 401:
+                base["code"] = "K8S_UNAUTHORIZED"
+            elif status == 422:
+                base["code"] = "K8S_INVALID"
+            elif status and status >= 500:
+                base["code"] = "K8S_SERVER_ERROR"
+            else:
+                base["code"] = "K8S_ERROR"
         return base
 
     def _ensure_config_map(self, action: Action):

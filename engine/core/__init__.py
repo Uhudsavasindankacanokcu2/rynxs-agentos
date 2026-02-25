@@ -11,7 +11,7 @@ This module provides the foundational abstractions for deterministic state manag
 """
 
 from .events import Event
-from .state import State
+from .state import State, UniverseState
 from .reducer import Reducer
 from .canonical import canonicalize, canonical_json_bytes, canonical_json_str
 from .clock import DeterministicClock
@@ -21,6 +21,7 @@ from .errors import DeterminismError, InvalidTransitionError, IntegrityError, Ev
 __all__ = [
     "Event",
     "State",
+    "UniverseState",
     "Reducer",
     "canonicalize",
     "canonical_json_bytes",
