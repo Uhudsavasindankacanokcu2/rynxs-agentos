@@ -9,6 +9,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Dict, Any, List
 
+# Clean bootstrap for CLI output
+from engine.cli._bootstrap import bootstrap
+
+bootstrap()
+
 from engine.log import FileEventStore
 from engine.replay import replay
 from engine.core import Reducer

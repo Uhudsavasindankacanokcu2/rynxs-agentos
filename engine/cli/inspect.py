@@ -10,6 +10,11 @@ import json
 import sys
 from pathlib import Path
 
+# Clean bootstrap for CLI output
+from engine.cli._bootstrap import bootstrap
+
+bootstrap()
+
 # Ensure repo root on path for operator reducer handlers
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:

@@ -6,6 +6,11 @@ import argparse
 import json
 import sys
 
+# Clean bootstrap for CLI output
+from engine.cli._bootstrap import bootstrap
+
+bootstrap()
+
 from engine.verify import verify_actions_decided_pointers
 
 
