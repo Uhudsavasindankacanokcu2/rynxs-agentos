@@ -1,0 +1,15 @@
+operator:
+  kind: statefulset
+  replicaCount: 3
+  hashVersion: "v2"
+  writerId: ""
+  leaderElection:
+    enabled: true
+  eventStore:
+    persistence:
+      enabled: true
+      size: "50Gi"
+    rotation:
+      enabled: true
+      maxBytes: 52428800
+      maxSegments: 20

@@ -131,6 +131,51 @@ Notes:
 - `writerId` empty → `POD_NAME` is used; with StatefulSet this is stable.
 - MinIO sink CronJob is only wired for `deployment` mode in the default chart.
 
+### StatefulSet Rollout Examples
+
+Staging values:
+
+```yaml
+operator:
+  kind: statefulset
+  replicaCount: 2
+  hashVersion: "v2"
+  writerId: "" # default = POD_NAME (stable: <release>-operator-0/1)
+  leaderElection:
+    enabled: true
+  eventStore:
+    persistence:
+      enabled: true
+      size: "10Gi"
+```
+
+Production values:
+
+```yaml
+operator:
+  kind: statefulset
+  replicaCount: 3
+  hashVersion: "v2"
+  writerId: "" # default = POD_NAME (stable: <release>-operator-0/1/2)
+  leaderElection:
+    enabled: true
+  eventStore:
+    persistence:
+      enabled: true
+      size: "50Gi"
+    rotation:
+      enabled: true
+      maxBytes: 52428800
+      maxSegments: 20
+```
+
+### Helm Template Sanity (Optional)
+
+```bash
+scripts/helm_template_sanity.sh docs/examples/values-staging.yaml
+scripts/helm_template_sanity.sh docs/examples/values-prod.yaml
+```
+
 ### Event Store Rotation + MinIO Sink (Optional)
 
 Rotation is supported via segmented log files:
