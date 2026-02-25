@@ -53,6 +53,27 @@ handlers_spec.loader.exec_module(handlers_module)
 register_handlers = handlers_module.register_handlers
 UNIVERSE_AGG_ID = handlers_module.UNIVERSE_AGG_ID
 
+FIXTURE_SET = os.getenv("RYNXS_FIXTURE_SET", "v1")
+FIXTURES_DIR = Path(__file__).parent / "fixtures" / FIXTURE_SET
+if not FIXTURES_DIR.exists():
+    FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+EXPECTED_HASHES = {
+    "v1": {
+        "small": "6a2d25ae69313ebf7eaa4ce0ef9658b4a6aee6165e2a15edd6b0b6e20b4a4b29",
+        "weird": "228a0f4184447c46566e3d2225c16cbe4048d8bca2e11f34d07addf94289c268",
+    },
+    "v2": {
+        "small": "6a2d25ae69313ebf7eaa4ce0ef9658b4a6aee6165e2a15edd6b0b6e20b4a4b29",
+        "weird": "228a0f4184447c46566e3d2225c16cbe4048d8bca2e11f34d07addf94289c268",
+    },
+}
+
+def _expected_hash(name: str) -> str:
+    if FIXTURE_SET in EXPECTED_HASHES and name in EXPECTED_HASHES[FIXTURE_SET]:
+        return EXPECTED_HASHES[FIXTURE_SET][name]
+    return EXPECTED_HASHES["v1"][name]
+
 
 def _state_hash(state: State) -> str:
     data = {"version": state.version, "aggregates": state.aggregates}
@@ -420,8 +441,8 @@ def test_golden_log_fixture_replay():
     """
     print("\nTest F: Golden fixture replay")
 
-    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
-    expected_hash = "6a2d25ae69313ebf7eaa4ce0ef9658b4a6aee6165e2a15edd6b0b6e20b4a4b29"
+    fixture_path = FIXTURES_DIR / "operator_log_small.jsonl"
+    expected_hash = _expected_hash("small")
 
     reducer = Reducer(global_aggregate_id=UNIVERSE_AGG_ID)
     register_handlers(reducer)
@@ -443,8 +464,8 @@ def test_golden_log_weird_fixture_replay():
     """
     print("\nTest G: Weird fixture replay")
 
-    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_weird.jsonl"
-    expected_hash = "228a0f4184447c46566e3d2225c16cbe4048d8bca2e11f34d07addf94289c268"
+    fixture_path = FIXTURES_DIR / "operator_log_weird.jsonl"
+    expected_hash = _expected_hash("weird")
 
     reducer = Reducer(global_aggregate_id=UNIVERSE_AGG_ID)
     register_handlers(reducer)
@@ -486,6 +507,7 @@ def _tamper_pointer_fixture(src_path: Path, dst_path: Path) -> None:
             ts=ev.get("ts"),
             payload=ev.get("payload", {}),
             meta=ev.get("meta", {}),
+            hash_version=ev.get("hash_version"),
         )
         rec["prev_hash"] = prev_hash
         rec["event_hash"] = hash_event(prev_hash, event_obj)
@@ -501,7 +523,7 @@ def test_verify_actions_decided_pointers_pass():
     Test H: Pointer verification passes on small fixture.
     """
     print("\nTest H: Pointer verification (pass)")
-    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
+    fixture_path = FIXTURES_DIR / "operator_log_small.jsonl"
     result = verify_actions_decided_pointers(str(fixture_path))
     assert result.valid
     assert result.checked > 0
@@ -513,7 +535,7 @@ def test_verify_actions_decided_pointers_fail():
     Test I: Pointer verification fails on tampered fixture.
     """
     print("\nTest I: Pointer verification (fail)")
-    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
+    fixture_path = FIXTURES_DIR / "operator_log_small.jsonl"
     with tempfile.TemporaryDirectory() as tmpdir:
         dst = Path(tmpdir) / "tampered.jsonl"
         _tamper_pointer_fixture(fixture_path, dst)
@@ -528,7 +550,7 @@ def test_decision_proof_pass():
     Test J: Decision proof passes on small fixture.
     """
     print("\nTest J: Decision proof (pass)")
-    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
+    fixture_path = FIXTURES_DIR / "operator_log_small.jsonl"
     proof = build_decision_proof(str(fixture_path), at_seq=0)
     assert proof.get("valid") is True
     print("  ✓ Decision proof passed")
@@ -539,7 +561,7 @@ def test_decision_proof_fail():
     Test K: Decision proof fails on tampered fixture.
     """
     print("\nTest K: Decision proof (fail)")
-    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
+    fixture_path = FIXTURES_DIR / "operator_log_small.jsonl"
     with tempfile.TemporaryDirectory() as tmpdir:
         dst = Path(tmpdir) / "tampered.jsonl"
         _tamper_pointer_fixture(fixture_path, dst)

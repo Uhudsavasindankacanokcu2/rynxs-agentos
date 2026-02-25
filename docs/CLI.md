@@ -112,8 +112,14 @@ This snippet shows:
 
 ### Fixture log
 ```bash
-scripts/engine_cli.sh inspect --log engine/tests/fixtures/operator_log_small.jsonl
-scripts/engine_cli.sh audit_report --log engine/tests/fixtures/operator_log_small.jsonl --format md
+scripts/engine_cli.sh inspect --log engine/tests/fixtures/v1/operator_log_small.jsonl
+scripts/engine_cli.sh audit_report --log engine/tests/fixtures/v1/operator_log_small.jsonl --format md
+```
+
+### Fixture log (v2 hash surface)
+```bash
+RYNXS_HASH_VERSION=v2 RYNXS_FIXTURE_SET=v2 \
+  scripts/engine_cli.sh audit_report --log engine/tests/fixtures/v2/operator_log_small.jsonl --format md
 ```
 
 ### Real operator log

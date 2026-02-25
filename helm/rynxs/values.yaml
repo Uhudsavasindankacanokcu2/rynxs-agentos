@@ -23,6 +23,7 @@ operator:
     name: rynxs-operator
   rbac:
     create: true
+  hashVersion: ""
   writerId: ""
   leaderElection:
     enabled: false

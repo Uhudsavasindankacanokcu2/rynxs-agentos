@@ -219,10 +219,21 @@ class FileEventStore(EventStore):
 
         seq = last_seq + 1
         hash_version = event.hash_version
-        if not hash_version:
-            env_hash_version = os.getenv("RYNXS_HASH_VERSION")
-            if env_hash_version and env_hash_version.lower() == "v2":
+        env_hash_version = os.getenv("RYNXS_HASH_VERSION")
+        if env_hash_version:
+            env_val = env_hash_version.strip().lower()
+            if env_val not in ("v1", "v2"):
+                raise EventStoreError(f"unsupported hash version: {env_hash_version}")
+            if hash_version and env_val != hash_version:
+                raise EventStoreError(
+                    f"hash version mismatch: env={env_val} event={hash_version}"
+                )
+            if env_val == "v2":
                 hash_version = "v2"
+            elif env_val == "v1":
+                hash_version = None
+        elif not hash_version:
+            hash_version = None
 
         e2 = Event(
             type=event.type,

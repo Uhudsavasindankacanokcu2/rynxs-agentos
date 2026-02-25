@@ -22,6 +22,19 @@ RYNXS_HASH_VERSION=v2
 
 This is applied at append time by the EventStore.
 
+Valid values:
+- unset / empty: v1
+- `v1`: v1 (explicit)
+- `v2`: v2
+- any other value: **fail fast**
+
+## Fixture Sets
+
+| Mode | Env | Default? | Meta omission | Fixture set |
+|------|-----|----------|---------------|-------------|
+| v1 | unset / `v1` | ✅ | no | `engine/tests/fixtures/v1` |
+| v2 | `v2` | opt‑in | empty meta omitted | `engine/tests/fixtures/v2` |
+
 ## Migration Plan
 1. **Staging first**: enable `RYNXS_HASH_VERSION=v2` and validate determinism gate.
 2. **Regenerate fixtures** (only if you choose to migrate fixtures to v2):

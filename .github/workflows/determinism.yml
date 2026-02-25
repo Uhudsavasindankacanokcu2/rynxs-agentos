@@ -8,6 +8,16 @@ jobs:
   determinism-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      matrix:
+        include:
+          - fixture_set: v1
+            hash_version: ""
+          - fixture_set: v2
+            hash_version: v2
+    env:
+      RYNXS_FIXTURE_SET: ${{ matrix.fixture_set }}
+      RYNXS_HASH_VERSION: ${{ matrix.hash_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,14 +43,14 @@ jobs:
       - name: Generate audit report (artifact)
         if: failure()
         run: |
-          scripts/engine_cli.sh audit_report --log engine/tests/fixtures/operator_log_small.jsonl --format json --out /tmp/audit_report.json
+          scripts/engine_cli.sh audit_report --log engine/tests/fixtures/${{ matrix.fixture_set }}/operator_log_small.jsonl --format json --out /tmp/audit_report.json
 
       - name: Upload artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: determinism-artifacts
+          name: determinism-artifacts-${{ matrix.fixture_set }}
           path: |
-            engine/tests/fixtures/operator_log_small.jsonl
-            engine/tests/fixtures/operator_log_weird.jsonl
+            engine/tests/fixtures/${{ matrix.fixture_set }}/operator_log_small.jsonl
+            engine/tests/fixtures/${{ matrix.fixture_set }}/operator_log_weird.jsonl
             /tmp/audit_report.json

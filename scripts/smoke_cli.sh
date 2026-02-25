@@ -2,7 +2,12 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOG="$ROOT/engine/tests/fixtures/operator_log_small.jsonl"
+FIXTURE_SET="${RYNXS_FIXTURE_SET:-v1}"
+FIXTURES_DIR="$ROOT/engine/tests/fixtures/$FIXTURE_SET"
+if [ ! -d "$FIXTURES_DIR" ]; then
+  FIXTURES_DIR="$ROOT/engine/tests/fixtures"
+fi
+LOG="$FIXTURES_DIR/operator_log_small.jsonl"
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONNOUSERSITE=1
 export TMPDIR="${TMPDIR:-/tmp/rynxs-tmp-$$}"

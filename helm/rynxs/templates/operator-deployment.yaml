@@ -47,6 +47,10 @@ spec:
                 fieldRef:
                   fieldPath: metadata.name
             {{- end }}
+            {{- if .Values.operator.hashVersion }}
+            - name: RYNXS_HASH_VERSION
+              value: {{ .Values.operator.hashVersion | quote }}
+            {{- end }}
             - name: RYNXS_LEADER_ELECTION_ENABLED
               value: {{ ternary "1" "0" .Values.operator.leaderElection.enabled | quote }}
             - name: RYNXS_LEASE_NAME

@@ -39,3 +39,4 @@ This checklist defines the non-determinism sources we must control and the appro
 - `scripts/determinism_gate.sh` must pass
 - Golden + weird fixtures must match expected state hash
 - Pointer/proof verification must pass
+- Run gate for **both** fixture sets: `RYNXS_FIXTURE_SET=v1` and `RYNXS_FIXTURE_SET=v2`

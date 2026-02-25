@@ -9,6 +9,7 @@ TMPDIR="${TMPDIR:-/tmp}"
 export TMPDIR
 export RYNXS_OPERATOR_PATH="$ROOT/operator/universe_operator"
 export RYNXS_WRITER_ID="ci"
+export RYNXS_FIXTURE_SET="${RYNXS_FIXTURE_SET:-v1}"
 
 filter_err() {
   grep -vE "xcrun_db-|couldn't create cache file.*xcrun_db" "$1" >&2 || true
@@ -37,6 +38,11 @@ fi
 echo "pytest not available; running direct test runner" >&2
 run_py python3 "$ROOT/engine/tests/test_operator_determinism.py"
 
+FIXTURES_DIR="$ROOT/engine/tests/fixtures/$RYNXS_FIXTURE_SET"
+if [ ! -d "$FIXTURES_DIR" ]; then
+  FIXTURES_DIR="$ROOT/engine/tests/fixtures"
+fi
+
 echo "running CLI smoke (wrapper)" >&2
-"$ROOT/scripts/engine_cli.sh" verify_pointers --log "$ROOT/engine/tests/fixtures/operator_log_small.jsonl" >/dev/null
-"$ROOT/scripts/engine_cli.sh" audit_report --log "$ROOT/engine/tests/fixtures/operator_log_small.jsonl" --format json >/dev/null
+"$ROOT/scripts/engine_cli.sh" verify_pointers --log "$FIXTURES_DIR/operator_log_small.jsonl" >/dev/null
+"$ROOT/scripts/engine_cli.sh" audit_report --log "$FIXTURES_DIR/operator_log_small.jsonl" --format json >/dev/null
