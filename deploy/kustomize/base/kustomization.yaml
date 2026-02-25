@@ -1,13 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: universe
-
 resources:
   - ../../../crds
   - namespace.yaml
-  - gvisor-runtimeclass.yaml
-  - networkpolicy-agent-deny-egress.yaml
-  - networkpolicy-agent-allow-egress.yaml
-  - networkpolicy-sandbox-deny-egress.yaml
   - minio.yaml
   - operator.yaml
