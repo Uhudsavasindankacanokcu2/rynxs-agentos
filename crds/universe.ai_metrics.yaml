@@ -30,15 +30,18 @@ spec:
                   description: Agent name
                 period:
                   type: string
+                  pattern: '^[0-9]{4}-(Q[1-4]|(0[1-9]|1[0-2]))$'
                   description: Reporting period (e.g. 2024-Q1, 2024-02)
                 metrics:
                   type: object
                   properties:
                     tasksCompleted:
                       type: integer
+                      minimum: 0
                       description: Number of tasks completed
                     tasksFailed:
                       type: integer
+                      minimum: 0
                       description: Number of tasks failed
                     averageCompletionTime:
                       type: string
@@ -46,10 +49,14 @@ spec:
                     errorRate:
                       type: number
                       format: double
+                      minimum: 0.0
+                      maximum: 1.0
                       description: Error rate (0.0-1.0)
                     auditScore:
                       type: number
                       format: double
+                      minimum: 0.0
+                      maximum: 1.0
                       description: Compliance score (0.0-1.0)
                     uptime:
                       type: string
