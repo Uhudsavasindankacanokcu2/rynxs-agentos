@@ -12,7 +12,8 @@ Side effects are isolated here for replay determinism.
 import sys
 import os
 import json
-from typing import List
+import hashlib
+from typing import List, Dict, Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
 
@@ -20,6 +21,7 @@ from kubernetes import client
 from engine.log import EventStore
 from engine.core import Event
 from engine.core.clock import DeterministicClock
+from engine.core.canonical import canonical_json_bytes, canonicalize
 from .decision_layer import Action, action_id
 
 
@@ -78,16 +80,7 @@ class ExecutorLayer:
         for action in actions:
             action_uid = action_id(action)
             try:
-                if action.action_type == "EnsureConfigMap":
-                    self._ensure_config_map(action)
-                elif action.action_type == "EnsurePVC":
-                    self._ensure_pvc(action)
-                elif action.action_type == "EnsureDeployment":
-                    self._ensure_deployment(action)
-                elif action.action_type == "EnsureNetworkPolicy":
-                    self._ensure_network_policy(action)
-                else:
-                    raise ValueError(f"Unknown action type: {action.action_type}")
+                result = self._apply_action(action)
 
                 # Log success
                 event = Event(
@@ -99,7 +92,13 @@ class ExecutorLayer:
                         "action_type": action.action_type,
                         "target": action.target,
                         "status": "success",
-                        "result_code": "OK",
+                        "result_code": result.get("reason_code"),
+                        "resource_ref": result.get("resource_ref"),
+                        "operation": result.get("operation"),
+                        "noop": result.get("noop"),
+                        "status_code": result.get("status_code"),
+                        "desired_hash": result.get("desired_hash"),
+                        "observed_hash": result.get("observed_hash"),
                     },
                     meta={"executor": "k8s"},
                 )
@@ -113,6 +112,8 @@ class ExecutorLayer:
                 self.logger.error(f"Failed to apply action {action.action_type}: {e}")
 
                 stable_error = self._stable_error(e)
+                desired_hash = self._desired_hash(action)
+                resource_ref = self._resource_ref(action)
 
                 # Log failure
                 event = Event(
@@ -123,6 +124,8 @@ class ExecutorLayer:
                         "action_id": action_uid,
                         "action_type": action.action_type,
                         "target": action.target,
+                        "resource_ref": resource_ref,
+                        "desired_hash": desired_hash,
                         "result_code": stable_error.get("code"),
                         "error": stable_error,
                     },
@@ -132,6 +135,122 @@ class ExecutorLayer:
                 feedback_events.append(stored_event)
 
         return feedback_events
+
+    def _apply_action(self, action: Action) -> Dict[str, Any]:
+        if action.action_type == "EnsureConfigMap":
+            return self._ensure_config_map(action)
+        if action.action_type == "EnsurePVC":
+            return self._ensure_pvc(action)
+        if action.action_type == "EnsureDeployment":
+            return self._ensure_deployment(action)
+        if action.action_type == "EnsureNetworkPolicy":
+            return self._ensure_network_policy(action)
+        raise ValueError(f"Unknown action type: {action.action_type}")
+
+    def _resource_ref(self, action: Action) -> str:
+        kind = {
+            "EnsureConfigMap": "ConfigMap",
+            "EnsurePVC": "PersistentVolumeClaim",
+            "EnsureDeployment": "Deployment",
+            "EnsureNetworkPolicy": "NetworkPolicy",
+        }.get(action.action_type, "Unknown")
+        name = action.params.get("name")
+        namespace = action.params.get("namespace")
+        return f"{kind}/{namespace}/{name}"
+
+    def _hash_obj(self, obj: Any) -> str:
+        canon = canonicalize(obj if obj is not None else {})
+        return hashlib.sha256(canonical_json_bytes(canon)).hexdigest()
+
+    def _desired_hash(self, action: Action) -> str:
+        if action.action_type == "EnsureDeployment":
+            spec = self._normalize_deployment_spec(action.params.get("spec", {}))
+            return self._hash_obj(spec)
+        if action.action_type == "EnsureNetworkPolicy":
+            spec = self._normalize_network_policy_spec(action.params)
+            return self._hash_obj(spec)
+        if action.action_type == "EnsureConfigMap":
+            return self._hash_obj(action.params.get("data", {}))
+        if action.action_type == "EnsurePVC":
+            spec = self._normalize_pvc_spec(action.params)
+            return self._hash_obj(spec)
+        return self._hash_obj(action.params)
+
+    def _normalize_deployment_spec(self, spec: dict) -> dict:
+        spec = dict(spec or {})
+        spec.pop("image_verify", None)
+        spec["env"] = sorted(spec.get("env", []), key=lambda e: e.get("name", ""))
+        spec["volume_mounts"] = sorted(
+            spec.get("volume_mounts", []),
+            key=lambda v: (v.get("name", ""), v.get("mount_path", "")),
+        )
+        spec["volumes"] = sorted(spec.get("volumes", []), key=lambda v: v.get("name", ""))
+        return spec
+
+    def _deployment_spec_from_obj(self, dep) -> dict:
+        template = dep.spec.template.spec
+        container = template.containers[0] if template.containers else None
+
+        env = []
+        if container and container.env:
+            for e in container.env:
+                env.append({"name": e.name, "value": e.value})
+
+        volume_mounts = []
+        if container and container.volume_mounts:
+            for vm in container.volume_mounts:
+                volume_mounts.append(
+                    {
+                        "name": vm.name,
+                        "mount_path": vm.mount_path,
+                        "read_only": vm.read_only or False,
+                    }
+                )
+
+        volumes = []
+        if template.volumes:
+            for vol in template.volumes:
+                if vol.persistent_volume_claim:
+                    volumes.append({"name": vol.name, "pvc": vol.persistent_volume_claim.claim_name})
+                elif vol.config_map:
+                    volumes.append({"name": vol.name, "configmap": vol.config_map.name})
+
+        spec = {
+            "replicas": dep.spec.replicas,
+            "image": container.image if container else None,
+            "env": env,
+            "runtime_class": template.runtime_class_name,
+            "volume_mounts": volume_mounts,
+            "volumes": volumes,
+        }
+        return self._normalize_deployment_spec(spec)
+
+    def _normalize_network_policy_spec(self, params: dict) -> dict:
+        return {
+            "pod_selector": params.get("pod_selector", {}),
+            "policy_type": params.get("policy_type"),
+        }
+
+    def _network_policy_spec_from_obj(self, np) -> dict:
+        policy_types = [t for t in (np.spec.policy_types or [])]
+        egress = np.spec.egress or []
+        if "Egress" in policy_types:
+            if len(egress) == 0:
+                policy_type = "deny-egress"
+            else:
+                policy_type = "allow-egress"
+        else:
+            policy_type = "unknown"
+        return {
+            "pod_selector": ((np.spec.pod_selector.match_labels or {}) if np.spec.pod_selector else {}),
+            "policy_type": policy_type,
+        }
+
+    def _normalize_pvc_spec(self, params: dict) -> dict:
+        return {
+            "size": params.get("size"),
+            "storage_class": params.get("storage_class"),
+        }
 
     def _stable_error(self, err: Exception) -> dict:
         """
@@ -165,11 +284,19 @@ class ExecutorLayer:
                 base["code"] = "K8S_ERROR"
         return base
 
-    def _ensure_config_map(self, action: Action):
+    def _ensure_config_map(self, action: Action) -> Dict[str, Any]:
         """Create or update ConfigMap."""
         if not self.core_api:
             self.logger.warning("K8s API not available, skipping ConfigMap creation")
-            return
+            return {
+                "resource_ref": self._resource_ref(action),
+                "operation": "skip",
+                "noop": True,
+                "status_code": 0,
+                "reason_code": "NO_API",
+                "desired_hash": self._desired_hash(action),
+                "observed_hash": None,
+            }
 
         name = action.params["name"]
         namespace = action.params["namespace"]
@@ -178,22 +305,63 @@ class ExecutorLayer:
         cm = client.V1ConfigMap(
             metadata=client.V1ObjectMeta(name=name, namespace=namespace), data=data
         )
+        desired_hash = self._desired_hash(action)
+        resource_ref = self._resource_ref(action)
 
         try:
             self.core_api.create_namespaced_config_map(namespace, cm)
             self.logger.info(f"Created ConfigMap {namespace}/{name}")
+            return {
+                "resource_ref": resource_ref,
+                "operation": "create",
+                "noop": False,
+                "status_code": 201,
+                "reason_code": "CREATED",
+                "desired_hash": desired_hash,
+                "observed_hash": desired_hash,
+            }
         except client.exceptions.ApiException as e:
             if e.status == 409:  # Already exists
+                existing = self.core_api.read_namespaced_config_map(name, namespace)
+                observed_hash = self._hash_obj(existing.data or {})
+                if observed_hash == desired_hash:
+                    self.logger.info(f"ConfigMap {namespace}/{name} already matches (noop)")
+                    return {
+                        "resource_ref": resource_ref,
+                        "operation": "noop",
+                        "noop": True,
+                        "status_code": 304,
+                        "reason_code": "ALREADY_MATCHED",
+                        "desired_hash": desired_hash,
+                        "observed_hash": observed_hash,
+                    }
                 self.core_api.patch_namespaced_config_map(name, namespace, cm)
                 self.logger.info(f"Updated ConfigMap {namespace}/{name}")
+                return {
+                    "resource_ref": resource_ref,
+                    "operation": "patch",
+                    "noop": False,
+                    "status_code": 200,
+                    "reason_code": "PATCHED",
+                    "desired_hash": desired_hash,
+                    "observed_hash": observed_hash,
+                }
             else:
                 raise
 
-    def _ensure_pvc(self, action: Action):
+    def _ensure_pvc(self, action: Action) -> Dict[str, Any]:
         """Create PersistentVolumeClaim."""
         if not self.core_api:
             self.logger.warning("K8s API not available, skipping PVC creation")
-            return
+            return {
+                "resource_ref": self._resource_ref(action),
+                "operation": "skip",
+                "noop": True,
+                "status_code": 0,
+                "reason_code": "NO_API",
+                "desired_hash": self._desired_hash(action),
+                "observed_hash": None,
+            }
 
         name = action.params["name"]
         namespace = action.params["namespace"]
@@ -211,21 +379,58 @@ class ExecutorLayer:
         pvc = client.V1PersistentVolumeClaim(
             metadata=client.V1ObjectMeta(name=name, namespace=namespace), spec=pvc_spec
         )
+        desired_hash = self._desired_hash(action)
+        resource_ref = self._resource_ref(action)
 
         try:
             self.core_api.create_namespaced_persistent_volume_claim(namespace, pvc)
             self.logger.info(f"Created PVC {namespace}/{name}")
+            return {
+                "resource_ref": resource_ref,
+                "operation": "create",
+                "noop": False,
+                "status_code": 201,
+                "reason_code": "CREATED",
+                "desired_hash": desired_hash,
+                "observed_hash": desired_hash,
+            }
         except client.exceptions.ApiException as e:
             if e.status == 409:  # Already exists (PVC is immutable after creation)
                 self.logger.info(f"PVC {namespace}/{name} already exists (immutable)")
+                existing = self.core_api.read_namespaced_persistent_volume_claim(name, namespace)
+                observed_hash = self._hash_obj(
+                    self._normalize_pvc_spec(
+                        {
+                            "size": existing.spec.resources.requests.get("storage") if existing.spec.resources else None,
+                            "storage_class": existing.spec.storage_class_name,
+                        }
+                    )
+                )
+                return {
+                    "resource_ref": resource_ref,
+                    "operation": "noop",
+                    "noop": True,
+                    "status_code": 304,
+                    "reason_code": "IMMUTABLE_EXISTS",
+                    "desired_hash": desired_hash,
+                    "observed_hash": observed_hash,
+                }
             else:
                 raise
 
-    def _ensure_deployment(self, action: Action):
+    def _ensure_deployment(self, action: Action) -> Dict[str, Any]:
         """Create or update Deployment."""
         if not self.apps_api:
             self.logger.warning("K8s API not available, skipping Deployment creation")
-            return
+            return {
+                "resource_ref": self._resource_ref(action),
+                "operation": "skip",
+                "noop": True,
+                "status_code": 0,
+                "reason_code": "NO_API",
+                "desired_hash": self._desired_hash(action),
+                "observed_hash": None,
+            }
 
         name = action.params["name"]
         namespace = action.params["namespace"]
@@ -249,14 +454,48 @@ class ExecutorLayer:
                 ),
             ),
         )
+        desired_hash = self._desired_hash(action)
+        resource_ref = self._resource_ref(action)
 
         try:
             self.apps_api.create_namespaced_deployment(namespace, dep)
             self.logger.info(f"Created Deployment {namespace}/{name}")
+            return {
+                "resource_ref": resource_ref,
+                "operation": "create",
+                "noop": False,
+                "status_code": 201,
+                "reason_code": "CREATED",
+                "desired_hash": desired_hash,
+                "observed_hash": desired_hash,
+            }
         except client.exceptions.ApiException as e:
             if e.status == 409:
+                existing = self.apps_api.read_namespaced_deployment(name, namespace)
+                observed_spec = self._deployment_spec_from_obj(existing)
+                observed_hash = self._hash_obj(observed_spec)
+                if observed_hash == desired_hash:
+                    self.logger.info(f"Deployment {namespace}/{name} already matches (noop)")
+                    return {
+                        "resource_ref": resource_ref,
+                        "operation": "noop",
+                        "noop": True,
+                        "status_code": 304,
+                        "reason_code": "ALREADY_MATCHED",
+                        "desired_hash": desired_hash,
+                        "observed_hash": observed_hash,
+                    }
                 self.apps_api.patch_namespaced_deployment(name, namespace, dep)
                 self.logger.info(f"Updated Deployment {namespace}/{name}")
+                return {
+                    "resource_ref": resource_ref,
+                    "operation": "patch",
+                    "noop": False,
+                    "status_code": 200,
+                    "reason_code": "PATCHED",
+                    "desired_hash": desired_hash,
+                    "observed_hash": observed_hash,
+                }
             else:
                 raise
 
@@ -317,11 +556,19 @@ class ExecutorLayer:
             volumes=volumes,
         )
 
-    def _ensure_network_policy(self, action: Action):
+    def _ensure_network_policy(self, action: Action) -> Dict[str, Any]:
         """Create NetworkPolicy."""
         if not self.net_api:
             self.logger.warning("K8s API not available, skipping NetworkPolicy creation")
-            return
+            return {
+                "resource_ref": self._resource_ref(action),
+                "operation": "skip",
+                "noop": True,
+                "status_code": 0,
+                "reason_code": "NO_API",
+                "desired_hash": self._desired_hash(action),
+                "observed_hash": None,
+            }
 
         name = action.params["name"]
         namespace = action.params["namespace"]
@@ -346,13 +593,47 @@ class ExecutorLayer:
                 egress=egress,
             ),
         )
+        desired_hash = self._desired_hash(action)
+        resource_ref = self._resource_ref(action)
 
         try:
             self.net_api.create_namespaced_network_policy(namespace, np)
             self.logger.info(f"Created NetworkPolicy {namespace}/{name}")
+            return {
+                "resource_ref": resource_ref,
+                "operation": "create",
+                "noop": False,
+                "status_code": 201,
+                "reason_code": "CREATED",
+                "desired_hash": desired_hash,
+                "observed_hash": desired_hash,
+            }
         except client.exceptions.ApiException as e:
             if e.status == 409:
+                existing = self.net_api.read_namespaced_network_policy(name, namespace)
+                observed_spec = self._network_policy_spec_from_obj(existing)
+                observed_hash = self._hash_obj(observed_spec)
+                if observed_hash == desired_hash:
+                    self.logger.info(f"NetworkPolicy {namespace}/{name} already matches (noop)")
+                    return {
+                        "resource_ref": resource_ref,
+                        "operation": "noop",
+                        "noop": True,
+                        "status_code": 304,
+                        "reason_code": "ALREADY_MATCHED",
+                        "desired_hash": desired_hash,
+                        "observed_hash": observed_hash,
+                    }
                 self.net_api.patch_namespaced_network_policy(name, namespace, np)
                 self.logger.info(f"Updated NetworkPolicy {namespace}/{name}")
+                return {
+                    "resource_ref": resource_ref,
+                    "operation": "patch",
+                    "noop": False,
+                    "status_code": 200,
+                    "reason_code": "PATCHED",
+                    "desired_hash": desired_hash,
+                    "observed_hash": observed_hash,
+                }
             else:
                 raise
