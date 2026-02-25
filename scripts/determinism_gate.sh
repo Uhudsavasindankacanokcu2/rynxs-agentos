@@ -7,6 +7,7 @@ export PYTHONDONTWRITEBYTECODE=1
 export PYTHONNOUSERSITE=1
 TMPDIR="${TMPDIR:-/tmp}"
 export TMPDIR
+export RYNXS_OPERATOR_PATH="$ROOT/operator/universe_operator"
 
 filter_err() {
   grep -vE "xcrun_db-|couldn't create cache file.*xcrun_db" "$1" >&2 || true

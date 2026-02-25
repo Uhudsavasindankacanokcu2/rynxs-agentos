@@ -30,7 +30,9 @@ from engine.verify import verify_actions_decided_pointers
 # Import operator components (avoid name conflict with Python's operator module)
 import importlib.util
 
-operator_path = str(REPO_ROOT / "operator" / "universe_operator")
+operator_path = os.environ.get("RYNXS_OPERATOR_PATH") or str(REPO_ROOT / "operator" / "universe_operator")
+if not Path(operator_path).exists():
+    operator_path = str(REPO_ROOT / "operator" / "universe_operator")
 adapter_spec = importlib.util.spec_from_file_location("engine_adapter", f"{operator_path}/engine_adapter.py")
 decision_spec = importlib.util.spec_from_file_location("decision_layer", f"{operator_path}/decision_layer.py")
 
