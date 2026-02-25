@@ -15,8 +15,8 @@ import hashlib
 import json
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../'))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 from engine.core import Event, State, Reducer
 from engine.core.canonical import canonical_json_bytes
@@ -30,7 +30,7 @@ from engine.verify import verify_actions_decided_pointers
 # Import operator components (avoid name conflict with Python's operator module)
 import importlib.util
 
-operator_path = "/Users/sucuk/rynxs-agentos/operator/universe_operator"
+operator_path = str(REPO_ROOT / "operator" / "universe_operator")
 adapter_spec = importlib.util.spec_from_file_location("engine_adapter", f"{operator_path}/engine_adapter.py")
 decision_spec = importlib.util.spec_from_file_location("decision_layer", f"{operator_path}/decision_layer.py")
 
