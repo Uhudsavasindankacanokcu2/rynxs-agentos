@@ -1,10 +1,30 @@
 import kopf
 import kubernetes
+import sys
+import os
 from .reconcile import ensure_agent_runtime
 from .task_controller import TaskController
 from .team_controller import TeamController
 from .message_controller import MessageController
 from .metric_controller import MetricController
+
+# Engine integration imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
+from engine.log import FileEventStore
+from engine.core import Reducer
+from engine.core.clock import DeterministicClock
+from engine.replay import replay
+from .engine_adapter import EngineAdapter
+from .decision_layer import DecisionLayer
+from .executor_layer import ExecutorLayer
+
+# Initialize engine components (global for operator)
+event_store_path = os.getenv("EVENT_STORE_PATH", "/var/log/rynxs/operator-events.log")
+event_store = FileEventStore(event_store_path)
+clock = DeterministicClock(current=0)
+adapter = EngineAdapter(clock)
+decision_layer = DecisionLayer()
+reducer = Reducer()  # TODO: Register event handlers
 
 kubernetes.config.load_incluster_config()
 
@@ -14,8 +34,56 @@ def _startup(settings: kopf.OperatorSettings, **_):
 
 @kopf.on.create('universe.ai', 'v1alpha1', 'agents')
 @kopf.on.update('universe.ai', 'v1alpha1', 'agents')
-def agent_reconcile(spec, name, namespace, logger, **_):
-    logger.info(f"Reconciling Agent {namespace}/{name}")
+def agent_reconcile(spec, name, namespace, logger, meta, **_):
+    logger.info(f"Reconciling Agent {namespace}/{name} (engine-driven)")
+
+    # Extract labels from metadata
+    labels = meta.get("labels", {})
+
+    # Step 1: Translate K8s object → Event (deterministic)
+    event = adapter.agent_to_event(name, namespace, spec, labels)
+    logger.debug(f"Translated to event: type={event.type}, aggregate_id={event.aggregate_id}")
+
+    # Step 2: Append event to log (hash chain + sequence)
+    try:
+        event_stored = event_store.append(event)
+        logger.info(f"Logged event seq={event_stored.seq}, hash_chain=OK")
+    except Exception as e:
+        logger.error(f"Failed to append event: {e}")
+        raise
+
+    # Step 3: Replay to get current state (deterministic)
+    try:
+        replay_result = replay(event_store, reducer)
+        state = replay_result.state
+        logger.debug(f"Replayed {replay_result.applied} events, state_version={state.version}")
+    except Exception as e:
+        logger.error(f"Replay failed: {e}")
+        raise
+
+    # Step 4: Decide actions (pure, deterministic)
+    try:
+        actions = decision_layer.decide(state, event_stored)
+        logger.info(f"Decided {len(actions)} actions: {[a.action_type for a in actions]}")
+    except Exception as e:
+        logger.error(f"Decision layer failed: {e}")
+        raise
+
+    # Step 5: Execute actions (side effects)
+    try:
+        executor = ExecutorLayer(event_store, clock, logger)
+        feedback_events = executor.apply(actions)
+        logger.info(f"Executed actions, logged {len(feedback_events)} feedback events")
+    except Exception as e:
+        logger.error(f"Executor failed: {e}")
+        raise
+
+    logger.info(f"Agent {namespace}/{name} reconciliation complete (engine loop)")
+
+# Legacy fallback (for testing without engine loop)
+def agent_reconcile_legacy(spec, name, namespace, logger, **_):
+    """Legacy reconcile path (direct K8s API calls)"""
+    logger.info(f"Reconciling Agent {namespace}/{name} (legacy mode)")
     ensure_agent_runtime(agent_name=name, namespace=namespace, agent_spec=spec, logger=logger)
 
 @kopf.on.create('universe.ai', 'v1alpha1', 'tasks')
