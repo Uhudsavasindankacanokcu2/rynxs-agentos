@@ -1,0 +1,89 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: messages.universe.ai
+spec:
+  group: universe.ai
+  scope: Namespaced
+  names:
+    plural: messages
+    singular: message
+    kind: Message
+    shortNames:
+      - msg
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - from
+                - content
+              properties:
+                from:
+                  type: string
+                  description: Sender agent name
+                to:
+                  type: string
+                  description: Recipient agent name (optional for broadcasts)
+                channel:
+                  type: string
+                  description: Channel/team name for group messages
+                content:
+                  type: string
+                  description: Message content
+                priority:
+                  type: string
+                  enum: ["low", "normal", "high", "urgent"]
+                  default: "normal"
+                  description: Message priority
+                thread:
+                  type: string
+                  description: Thread ID for conversation grouping
+                metadata:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  description: Additional message metadata
+            status:
+              type: object
+              properties:
+                delivered:
+                  type: boolean
+                  description: Whether message was delivered
+                deliveredAt:
+                  type: string
+                  format: date-time
+                  description: Delivery timestamp
+                read:
+                  type: boolean
+                  description: Whether message was read
+                readAt:
+                  type: string
+                  format: date-time
+                  description: Read timestamp
+      additionalPrinterColumns:
+        - name: From
+          type: string
+          jsonPath: .spec.from
+        - name: To
+          type: string
+          jsonPath: .spec.to
+        - name: Channel
+          type: string
+          jsonPath: .spec.channel
+        - name: Priority
+          type: string
+          jsonPath: .spec.priority
+        - name: Delivered
+          type: boolean
+          jsonPath: .status.delivered
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

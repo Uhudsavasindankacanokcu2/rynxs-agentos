@@ -1,0 +1,41 @@
+apiVersion: universe.ai/v1alpha1
+kind: Team
+metadata:
+  name: backend-team
+  namespace: universe
+spec:
+  name: Backend Engineering
+  zone: engineering
+  lead: agent-manager-001
+  members:
+    - agent-worker-001
+    - agent-worker-002
+    - agent-worker-003
+  resources:
+    sharedWorkspace: backend-pvc
+    sharedKnowledge: /mnt/knowledge/backend
+  communication:
+    allowInternalChat: true
+    allowCrossTeam:
+      - frontend-team
+      - devops-team
+---
+apiVersion: universe.ai/v1alpha1
+kind: Team
+metadata:
+  name: frontend-team
+  namespace: universe
+spec:
+  name: Frontend Engineering
+  zone: engineering
+  lead: agent-manager-002
+  members:
+    - agent-worker-004
+    - agent-worker-005
+  resources:
+    sharedWorkspace: frontend-pvc
+    sharedKnowledge: /mnt/knowledge/frontend
+  communication:
+    allowInternalChat: true
+    allowCrossTeam:
+      - backend-team

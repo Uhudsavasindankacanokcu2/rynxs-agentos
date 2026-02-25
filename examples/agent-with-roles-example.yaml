@@ -1,0 +1,57 @@
+apiVersion: universe.ai/v1alpha1
+kind: Agent
+metadata:
+  name: agent-director-001
+  namespace: universe
+spec:
+  role: director
+  team: leadership
+  manages:
+    - agent-manager-001
+    - agent-manager-002
+  permissions:
+    canAssignTasks: true
+    canManageTeam: true
+    canAccessAuditLogs: true
+  image:
+    repository: ghcr.io/uhudsavasindankacanokcu2/rynxs-agent
+    tag: v0.1.0
+    verify: true
+---
+apiVersion: universe.ai/v1alpha1
+kind: Agent
+metadata:
+  name: agent-manager-001
+  namespace: universe
+spec:
+  role: manager
+  team: backend-team
+  manages:
+    - agent-worker-001
+    - agent-worker-002
+    - agent-worker-003
+  permissions:
+    canAssignTasks: true
+    canManageTeam: true
+    canAccessAuditLogs: false
+  image:
+    repository: ghcr.io/uhudsavasindankacanokcu2/rynxs-agent
+    tag: v0.1.0
+    verify: true
+---
+apiVersion: universe.ai/v1alpha1
+kind: Agent
+metadata:
+  name: agent-worker-001
+  namespace: universe
+spec:
+  role: worker
+  team: backend-team
+  permissions:
+    canAssignTasks: false
+    canManageTeam: false
+    canAccessAuditLogs: false
+  image:
+    repository: ghcr.io/uhudsavasindankacanokcu2/rynxs-agent
+    tag: v0.1.0
+    verify: true
