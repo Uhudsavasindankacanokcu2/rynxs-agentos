@@ -1,0 +1,41 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LOG="$ROOT/engine/tests/fixtures/operator_log_small.jsonl"
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONNOUSERSITE=1
+export TMPDIR="${TMPDIR:-/tmp/rynxs-tmp-$$}"
+mkdir -p "$TMPDIR"
+
+filter_err() {
+  grep -vE "xcrun_db-|couldn't create cache file.*xcrun_db" "$1" >&2 || true
+}
+
+run_py() {
+  err_file="$(mktemp "$TMPDIR/rynxs-smokeerr.XXXXXX")"
+  if "$@" 2>"$err_file"; then
+    filter_err "$err_file"
+    rm -f "$err_file"
+    return 0
+  fi
+  filter_err "$err_file"
+  rm -f "$err_file"
+  return 1
+}
+
+out="$("$ROOT/scripts/engine_cli.sh" inspect --log "$LOG")"
+run_py python3 - <<PY
+import json, sys
+data = json.loads("""$out""")
+assert "agents" in data and "applied_events" in data
+print("inspect ok")
+PY
+
+out="$("$ROOT/scripts/engine_cli.sh" audit_report --log "$LOG" --format json)"
+run_py python3 - <<PY
+import json, sys
+data = json.loads("""$out""")
+assert "hash_chain" in data and "pointers" in data and "decisions" in data
+print("audit_report ok")
+PY

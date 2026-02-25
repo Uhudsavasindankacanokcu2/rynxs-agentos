@@ -8,14 +8,18 @@ export PYTHONNOUSERSITE=1
 TMPDIR="${TMPDIR:-/tmp}"
 export TMPDIR
 
+filter_err() {
+  grep -vE "xcrun_db-|couldn't create cache file.*xcrun_db" "$1" >&2 || true
+}
+
 run_py() {
   err_file="$(mktemp "$TMPDIR/rynxs-pyerr.XXXXXX")"
   if "$@" 2>"$err_file"; then
-    grep -v "xcrun_db" "$err_file" >&2 || true
+    filter_err "$err_file"
     rm -f "$err_file"
     return 0
   fi
-  grep -v "xcrun_db" "$err_file" >&2 || true
+  filter_err "$err_file"
   rm -f "$err_file"
   return 1
 }
@@ -26,3 +30,7 @@ fi
 
 echo "pytest not available; running direct test runner" >&2
 run_py python3 "$ROOT/engine/tests/test_operator_determinism.py"
+
+echo "running CLI smoke (wrapper)" >&2
+"$ROOT/scripts/engine_cli.sh" verify_pointers --log "$ROOT/engine/tests/fixtures/operator_log_small.jsonl" >/dev/null
+"$ROOT/scripts/engine_cli.sh" audit_report --log "$ROOT/engine/tests/fixtures/operator_log_small.jsonl" --format json >/dev/null

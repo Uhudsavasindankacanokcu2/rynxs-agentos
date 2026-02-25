@@ -53,6 +53,15 @@ kubectl apply -f docs/examples/universe.yaml
 kubectl apply -f docs/examples/agent.yaml
 ```
 
+### CLI Quickstart (Determinism Toolchain)
+```bash
+scripts/engine_cli.sh inspect --log /var/log/rynxs/operator-events.log
+scripts/engine_cli.sh audit_report --log /var/log/rynxs/operator-events.log --format json
+scripts/determinism_gate.sh
+```
+
+See `docs/CLI.md` for full usage and examples.
+
 ### 2) Find the agent pod (namespace-agnostic)
 
 ```bash
