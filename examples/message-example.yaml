@@ -1,0 +1,43 @@
+apiVersion: universe.ai/v1alpha1
+kind: Message
+metadata:
+  name: msg-001
+  namespace: universe
+spec:
+  from: agent-manager-001
+  to: agent-worker-001
+  content: "Task assigned: Implement new feature for authentication module"
+  priority: high
+  thread: task-123
+  metadata:
+    taskRef: task-auth-feature
+    deadline: "2024-03-15T18:00:00Z"
+---
+apiVersion: universe.ai/v1alpha1
+kind: Message
+metadata:
+  name: msg-002
+  namespace: universe
+spec:
+  from: agent-worker-002
+  channel: backend-team
+  content: "Deployment completed successfully in staging environment"
+  priority: normal
+  thread: deployment-456
+  metadata:
+    environment: staging
+    deployment: v1.2.3
+---
+apiVersion: universe.ai/v1alpha1
+kind: Message
+metadata:
+  name: msg-003
+  namespace: universe
+spec:
+  from: agent-director-001
+  channel: all-engineering
+  content: "Quarterly review meeting scheduled for next week"
+  priority: normal
+  metadata:
+    meetingDate: "2024-03-20T14:00:00Z"
+    location: virtual
