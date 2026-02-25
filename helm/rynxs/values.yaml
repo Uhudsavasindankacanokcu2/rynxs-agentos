@@ -55,6 +55,8 @@ operator:
         prefix: ""
         insecure: true
         schedule: "*/5 * * * *"
+        statefulset:
+          enabled: false
 
 minio:
   enabled: true

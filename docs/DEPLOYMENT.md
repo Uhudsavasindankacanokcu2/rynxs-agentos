@@ -201,6 +201,20 @@ Notes:
 - Segments preserve hash-chain continuity across rotations.
 - MinIO sink runs as a CronJob to mirror the log directory.
 
+StatefulSet mode:
+- To mirror **each pod** event store PVC, enable:
+```yaml
+operator:
+  kind: statefulset
+  eventStore:
+    sink:
+      minio:
+        enabled: true
+        statefulset:
+          enabled: true
+```
+- This creates one CronJob per replica, targeting `/pod-<ordinal>` in the bucket.
+
 ### Storage Classes
 
 Configure PVC storage class for agent workspaces:

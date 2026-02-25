@@ -1,4 +1,4 @@
-{{- if and .Values.operator.eventStore.sink.minio.enabled .Values.operator.eventStore.persistence.enabled }}
+{{- if and .Values.operator.eventStore.sink.minio.enabled .Values.operator.eventStore.persistence.enabled (eq .Values.operator.kind "deployment") }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -51,4 +51,70 @@ spec:
             - name: eventstore
               persistentVolumeClaim:
                 claimName: {{ include "rynxs.fullname" . }}-operator-eventstore
+{{- end }}
+
+{{- if and .Values.operator.eventStore.sink.minio.enabled .Values.operator.eventStore.persistence.enabled (eq .Values.operator.kind "statefulset") .Values.operator.eventStore.sink.minio.statefulset.enabled }}
+{{- $fullName := include "rynxs.fullname" . -}}
+{{- $bucket := .Values.operator.eventStore.sink.minio.bucket -}}
+{{- $prefix := .Values.operator.eventStore.sink.minio.prefix -}}
+{{- range $i := until (int .Values.operator.replicaCount) }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullName }}-eventstore-sink-{{ $i }}
+  namespace: {{ $.Values.namespace.name }}
+  labels:
+    {{- include "rynxs.operator.labels" $ | nindent 4 }}
+spec:
+  schedule: {{ $.Values.operator.eventStore.sink.minio.schedule | quote }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "rynxs.operator.labels" $ | nindent 12 }}
+        spec:
+          serviceAccountName: {{ $.Values.operator.serviceAccount.name }}
+          restartPolicy: OnFailure
+          containers:
+            - name: minio-sync
+              image: minio/mc:latest
+              env:
+                - name: MINIO_ENDPOINT
+                  value: {{ $.Values.operator.eventStore.sink.minio.endpoint | quote }}
+                - name: MINIO_ACCESS_KEY
+                  value: {{ $.Values.operator.eventStore.sink.minio.accessKey | quote }}
+                - name: MINIO_SECRET_KEY
+                  value: {{ $.Values.operator.eventStore.sink.minio.secretKey | quote }}
+                - name: MINIO_BUCKET
+                  value: {{ $bucket | quote }}
+                - name: MINIO_PREFIX
+                  value: {{ $prefix | quote }}
+                - name: MINIO_INSECURE
+                  value: {{ ternary "1" "0" $.Values.operator.eventStore.sink.minio.insecure | quote }}
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  if [ "$MINIO_INSECURE" = "1" ]; then
+                    mc alias set rynxs "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" --insecure
+                  else
+                    mc alias set rynxs "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
+                  fi
+                  target="rynxs/$MINIO_BUCKET"
+                  if [ -n "$MINIO_PREFIX" ]; then
+                    target="$target/$MINIO_PREFIX"
+                  fi
+                  target="$target/pod-{{ $i }}"
+                  mc mirror --overwrite "{{ $.Values.operator.eventStore.mountPath }}" "$target"
+              volumeMounts:
+                - name: eventstore
+                  mountPath: {{ $.Values.operator.eventStore.mountPath | quote }}
+          volumes:
+            - name: eventstore
+              persistentVolumeClaim:
+                claimName: {{ $fullName }}-operator-eventstore-{{ $i }}
+{{- end }}
 {{- end }}
