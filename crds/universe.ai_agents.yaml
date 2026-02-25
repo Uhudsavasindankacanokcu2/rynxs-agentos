@@ -55,11 +55,54 @@ spec:
                   properties:
                     repository:
                       type: string
+                      description: Container image repository
                     tag:
                       type: string
+                      description: Container image tag
+                      default: "latest"
                     verify:
                       type: boolean
-              x-kubernetes-preserve-unknown-fields: true
+                      description: Enable cosign signature verification
+                      default: false
+                  description: Container image configuration
+                workspace:
+                  type: object
+                  properties:
+                    size:
+                      type: string
+                      description: PVC size
+                      default: "1Gi"
+                      pattern: '^[0-9]+[EPTGMK]i?$'
+                    storageClassName:
+                      type: string
+                      description: Storage class name
+                  description: Persistent workspace configuration
             status:
               type: object
-              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending", "Running", "Failed", "Terminated"]
+                  description: Agent runtime phase
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: ["type", "status"]
+                    properties:
+                      type:
+                        type: string
+                        description: Condition type (e.g., ImageVerified, Ready)
+                      status:
+                        type: string
+                        enum: ["True", "False", "Unknown"]
+                      reason:
+                        type: string
+                        description: Machine-readable reason
+                      message:
+                        type: string
+                        description: Human-readable message
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                  description: Agent status conditions
