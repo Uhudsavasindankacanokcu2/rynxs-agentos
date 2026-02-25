@@ -116,6 +116,10 @@ kubectl set image deployment/rynxs-operator -n universe \
 
 ### Operator Code Structure
 
+Determinism references:
+- `docs/determinism-checklist.md`
+- `docs/hash-versioning.md`
+
 Main reconciliation flow:
 
 ```python

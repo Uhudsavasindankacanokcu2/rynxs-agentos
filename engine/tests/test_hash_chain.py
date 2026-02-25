@@ -141,3 +141,43 @@ def test_hash_chain_break_detection():
         # Chain should break at event 5
         assert not chain_valid
         assert broken_at == 5
+
+
+def test_hash_version_v2_omits_empty_meta():
+    """v2 hashing omits empty meta and includes hash_version."""
+    e_v1 = Event(type="TEST", aggregate_id="A", seq=0, ts=1, payload={"val": 1}, meta={})
+    e_v2 = Event(
+        type="TEST",
+        aggregate_id="A",
+        seq=0,
+        ts=1,
+        payload={"val": 1},
+        meta={},
+        hash_version="v2",
+    )
+
+    h1 = hash_event(ZERO_HASH, e_v1)
+    h2 = hash_event(ZERO_HASH, e_v2)
+
+    assert h1 != h2
+
+    rec = chain_record(ZERO_HASH, e_v2)
+    assert rec["event"].get("hash_version") == "v2"
+    assert "meta" not in rec["event"]
+
+
+def test_hash_version_v2_keeps_meta_when_present():
+    """v2 hashing includes meta when non-empty."""
+    e_v2 = Event(
+        type="TEST",
+        aggregate_id="A",
+        seq=0,
+        ts=1,
+        payload={"val": 1},
+        meta={"writer_id": "ci"},
+        hash_version="v2",
+    )
+
+    rec = chain_record(ZERO_HASH, e_v2)
+    assert rec["event"].get("hash_version") == "v2"
+    assert rec["event"].get("meta") == {"writer_id": "ci"}

@@ -19,6 +19,7 @@ class Event:
         ts: Timestamp (monotonic, from deterministic clock)
         payload: Event-specific data
         meta: Metadata (user, reason, etc.)
+        hash_version: Hashing schema version (None/v1 or v2)
         seq: Sequence number (assigned by EventStore)
     """
     type: str
@@ -26,6 +27,7 @@ class Event:
     ts: int
     payload: Dict[str, Any] = field(default_factory=dict)
     meta: Dict[str, Any] = field(default_factory=dict)
+    hash_version: Optional[str] = None
     seq: Optional[int] = None
 
     def require_seq(self) -> int:

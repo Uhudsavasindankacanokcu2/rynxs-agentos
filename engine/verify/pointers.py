@@ -50,6 +50,7 @@ def verify_actions_decided_pointers(log_path: str) -> PointerVerificationResult:
                 ts=ev.get("ts"),
                 payload=ev.get("payload", {}),
                 meta=ev.get("meta", {}),
+                hash_version=ev.get("hash_version"),
             )
 
             computed_hash = hash_event(prev_hash, event_obj)

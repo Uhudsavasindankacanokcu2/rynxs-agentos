@@ -10,6 +10,7 @@ import sys
 import tempfile
 import types
 from pathlib import Path
+from datetime import datetime, timezone
 
 from engine.core.events import Event
 from engine.log.file_store import FileEventStore
@@ -49,6 +50,7 @@ def _install_dummy_k8s_modules():
     client_mod.V1LeaseSpec = DummyObj
     client_mod.V1Lease = DummyObj
     client_mod.V1ObjectMeta = DummyObj
+    client_mod.ApiException = ApiException
 
     k8s.client = client_mod
 
@@ -174,3 +176,43 @@ def test_writer_id_meta_committed_when_env_set():
         store = FileEventStore(log_path)
         result = store.append(with_writer)
         assert result.event.meta.get("writer_id") == "ci"
+
+
+def test_leader_election_lease_drop_stops_leader():
+    _install_dummy_k8s_modules()
+    import importlib
+
+    le_spec = importlib.util.spec_from_file_location(
+        "rynxs_leader_election_test", str(REPO_ROOT / "operator" / "universe_operator" / "leader_election.py")
+    )
+    le = importlib.util.module_from_spec(le_spec)
+    le_spec.loader.exec_module(le)
+
+    class StubApi:
+        def read_namespaced_lease(self, name, namespace):
+            spec = le.client.V1LeaseSpec(
+                holder_identity="node-1",
+                lease_duration_seconds=30,
+                acquire_time=datetime.now(timezone.utc),
+                renew_time=datetime.now(timezone.utc),
+            )
+            return le.client.V1Lease(
+                metadata=le.client.V1ObjectMeta(name=name, namespace=namespace),
+                spec=spec,
+            )
+
+        def replace_namespaced_lease(self, name, namespace, body):
+            raise le.ApiException(status=500)
+
+    config = le.LeaderElectionConfig(
+        enabled=True,
+        lease_name="rynxs-operator-leader",
+        lease_duration_seconds=30,
+        renew_deadline_seconds=20,
+        retry_period_seconds=5,
+    )
+    elector = le.LeaderElector(namespace="default", identity="node-1", config=config)
+    elector._api = StubApi()
+
+    assert elector.ensure_leader() is False
+    assert elector.is_leader() is False
