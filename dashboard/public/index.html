@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rynxs Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; }
+        header { background: #2c3e50; color: white; padding: 1rem 2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        header h1 { font-size: 1.5rem; font-weight: 600; }
+        .container { max-width: 1400px; margin: 2rem auto; padding: 0 2rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card h2 { font-size: 1.25rem; margin-bottom: 1rem; color: #2c3e50; }
+        .stat { display: flex; justify-content: space-between; align-items: center; margin: 0.75rem 0; }
+        .stat-label { color: #7f8c8d; font-size: 0.9rem; }
+        .stat-value { font-size: 1.5rem; font-weight: 600; color: #2c3e50; }
+        .status { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.85rem; font-weight: 500; }
+        .status.active { background: #d4edda; color: #155724; }
+        .status.pending { background: #fff3cd; color: #856404; }
+        .status.failed { background: #f8d7da; color: #721c24; }
+        table { width: 100%; border-collapse: collapse; }
+        table th { text-align: left; padding: 0.75rem; background: #f8f9fa; font-weight: 600; font-size: 0.9rem; color: #495057; }
+        table td { padding: 0.75rem; border-top: 1px solid #dee2e6; font-size: 0.9rem; }
+        .actions { display: flex; gap: 0.5rem; }
+        .btn { padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
+        .btn-primary { background: #3498db; color: white; }
+        .btn-secondary { background: #95a5a6; color: white; }
+        .btn:hover { opacity: 0.9; }
+        .note { background: #e8f4f8; border-left: 4px solid #3498db; padding: 1rem; border-radius: 4px; margin-top: 1rem; }
+        .note p { color: #2c3e50; font-size: 0.9rem; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Rynxs Control Panel</h1>
+    </header>
+
+    <div class="container">
+        <div class="grid">
+            <div class="card">
+                <h2>Agents</h2>
+                <div class="stat">
+                    <span class="stat-label">Total</span>
+                    <span class="stat-value" id="total-agents">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Active</span>
+                    <span class="stat-value" id="active-agents">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Idle</span>
+                    <span class="stat-value" id="idle-agents">-</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Tasks</h2>
+                <div class="stat">
+                    <span class="stat-label">Total</span>
+                    <span class="stat-value" id="total-tasks">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Completed</span>
+                    <span class="stat-value" id="completed-tasks">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">In Progress</span>
+                    <span class="stat-value" id="inprogress-tasks">-</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Teams</h2>
+                <div class="stat">
+                    <span class="stat-label">Total</span>
+                    <span class="stat-value" id="total-teams">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Active</span>
+                    <span class="stat-value" id="active-teams">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Recent Tasks</h2>
+            <table id="tasks-table">
+                <thead>
+                    <tr>
+                        <th>Task</th>
+                        <th>Agent</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: #7f8c8d;">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="note">
+            <p><strong>Note:</strong> This dashboard connects to the Kubernetes API to fetch real-time data.
+            Ensure you have configured kubectl access and the dashboard has appropriate RBAC permissions.</p>
+            <p style="margin-top: 0.5rem;"><strong>API Endpoint:</strong> Configure via environment variable
+            <code>KUBE_API_URL</code> or use in-cluster service account.</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
