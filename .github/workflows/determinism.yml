@@ -8,6 +8,7 @@ jobs:
   determinism-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    name: determinism (${{ matrix.fixture_set }})
     strategy:
       matrix:
         include:
