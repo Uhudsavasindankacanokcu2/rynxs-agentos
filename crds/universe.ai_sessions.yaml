@@ -4,7 +4,7 @@ metadata:
   name: sessions.universe.ai
 spec:
   group: universe.ai
-  scope: Cluster
+  scope: Namespaced
   names:
     plural: sessions
     singular: session
