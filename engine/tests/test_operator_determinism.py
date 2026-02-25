@@ -199,6 +199,8 @@ def test_replay_equality():
         state = State(version=0, aggregates={})
 
         for event_stored in store.read(from_seq=0):
+            if event_stored.type != "AgentObserved":
+                continue
             # Replay: update state
             # (In real implementation, reducer would update state)
 
