@@ -1,0 +1,46 @@
+name: determinism
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  determinism-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Determinism gate
+        run: |
+          scripts/determinism_gate.sh
+
+      - name: Smoke CLI
+        run: |
+          scripts/smoke_cli.sh
+
+      - name: Generate audit report (artifact)
+        if: failure()
+        run: |
+          scripts/engine_cli.sh audit_report --log engine/tests/fixtures/operator_log_small.jsonl --format json --out /tmp/audit_report.json
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: determinism-artifacts
+          path: |
+            engine/tests/fixtures/operator_log_small.jsonl
+            engine/tests/fixtures/operator_log_weird.jsonl
+            /tmp/audit_report.json
