@@ -30,6 +30,29 @@ operator:
     leaseDurationSeconds: 30
     renewDeadlineSeconds: 20
     retryPeriodSeconds: 5
+  eventStore:
+    path: /var/log/rynxs/operator-events.log
+    mountPath: /var/log/rynxs
+    persistence:
+      enabled: false
+      size: 10Gi
+      storageClass: ""
+      accessModes:
+        - ReadWriteOnce
+    rotation:
+      enabled: false
+      maxBytes: 0
+      maxSegments: 0
+    sink:
+      minio:
+        enabled: false
+        endpoint: http://minio:9000
+        bucket: rynxs-logs
+        accessKey: minioadmin
+        secretKey: minioadmin
+        prefix: ""
+        insecure: true
+        schedule: "*/5 * * * *"
 
 minio:
   enabled: true

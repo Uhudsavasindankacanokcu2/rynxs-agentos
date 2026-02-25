@@ -18,6 +18,8 @@ spec:
         app: rynxs-operator
         {{- include "rynxs.selectorLabels" . | nindent 8 }}
     spec:
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
       serviceAccountName: {{ .Values.operator.serviceAccount.name }}
       containers:
         - name: operator
@@ -26,6 +28,8 @@ spec:
           env:
             - name: WATCH_NAMESPACE
               value: {{ .Values.namespace.name }}
+            - name: EVENT_STORE_PATH
+              value: {{ .Values.operator.eventStore.path | quote }}
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -46,13 +50,19 @@ spec:
             - name: RYNXS_LEADER_ELECTION_ENABLED
               value: {{ ternary "1" "0" .Values.operator.leaderElection.enabled | quote }}
             - name: RYNXS_LEASE_NAME
-              value: {{ .Values.operator.leaderElection.leaseName | quote }}
+              value: {{ default (printf "%s-leader" (include "rynxs.fullname" .)) .Values.operator.leaderElection.leaseName | quote }}
             - name: RYNXS_LEASE_DURATION_SECONDS
               value: {{ .Values.operator.leaderElection.leaseDurationSeconds | quote }}
             - name: RYNXS_RENEW_DEADLINE_SECONDS
               value: {{ .Values.operator.leaderElection.renewDeadlineSeconds | quote }}
             - name: RYNXS_RETRY_PERIOD_SECONDS
               value: {{ .Values.operator.leaderElection.retryPeriodSeconds | quote }}
+            {{- if .Values.operator.eventStore.rotation.enabled }}
+            - name: EVENT_STORE_MAX_BYTES
+              value: {{ .Values.operator.eventStore.rotation.maxBytes | quote }}
+            - name: EVENT_STORE_MAX_SEGMENTS
+              value: {{ .Values.operator.eventStore.rotation.maxSegments | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.operator.resources | nindent 12 }}
           livenessProbe:
@@ -75,3 +85,14 @@ spec:
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: eventstore
+              mountPath: {{ .Values.operator.eventStore.mountPath | quote }}
+      volumes:
+        - name: eventstore
+          {{- if .Values.operator.eventStore.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "rynxs.fullname" . }}-operator-eventstore
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

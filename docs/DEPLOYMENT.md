@@ -89,6 +89,52 @@ images:
     newTag: v1.0.0
 ```
 
+### Operator HA + Event Store (Recommended)
+
+Use at least 2 replicas with leader election enabled:
+
+```yaml
+operator:
+  replicaCount: 2
+  leaderElection:
+    enabled: true
+  eventStore:
+    persistence:
+      enabled: true
+    rotation:
+      enabled: false
+```
+
+Notes:
+- `leaderElection` keeps a single writer active while standby pods stay idle.
+- `eventStore.persistence` mounts a PVC at `/var/log/rynxs` for durable logs.
+- Set `operator.writerId` if you want a stable writer identity across restarts.
+
+### Event Store Rotation + MinIO Sink (Optional)
+
+Rotation is supported via segmented log files:
+
+```yaml
+operator:
+  eventStore:
+    rotation:
+      enabled: true
+      maxBytes: 52428800     # 50 MiB
+      maxSegments: 20
+    sink:
+      minio:
+        enabled: true
+        endpoint: http://minio:9000
+        bucket: rynxs-logs
+        accessKey: minioadmin
+        secretKey: minioadmin
+        prefix: ""
+```
+
+Notes:
+- Segments preserve hash-chain continuity across rotations.
+- MinIO sink runs as a CronJob to mirror the log directory.
+
 ### Storage Classes
 
 Configure PVC storage class for agent workspaces:

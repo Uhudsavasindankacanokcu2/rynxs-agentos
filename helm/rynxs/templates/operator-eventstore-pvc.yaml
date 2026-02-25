@@ -1,0 +1,18 @@
+{{- if .Values.operator.eventStore.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "rynxs.fullname" . }}-operator-eventstore
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "rynxs.operator.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.operator.eventStore.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.operator.eventStore.persistence.size | quote }}
+  {{- if .Values.operator.eventStore.persistence.storageClass }}
+  storageClassName: {{ .Values.operator.eventStore.persistence.storageClass | quote }}
+  {{- end }}
+{{- end }}

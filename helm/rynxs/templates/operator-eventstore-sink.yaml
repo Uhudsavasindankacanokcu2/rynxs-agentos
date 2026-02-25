@@ -1,0 +1,54 @@
+{{- if and .Values.operator.eventStore.sink.minio.enabled .Values.operator.eventStore.persistence.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "rynxs.fullname" . }}-eventstore-sink
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "rynxs.operator.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.operator.eventStore.sink.minio.schedule | quote }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "rynxs.operator.labels" . | nindent 12 }}
+        spec:
+          serviceAccountName: {{ .Values.operator.serviceAccount.name }}
+          restartPolicy: OnFailure
+          containers:
+            - name: minio-sync
+              image: minio/mc:latest
+              env:
+                - name: MINIO_ENDPOINT
+                  value: {{ .Values.operator.eventStore.sink.minio.endpoint | quote }}
+                - name: MINIO_ACCESS_KEY
+                  value: {{ .Values.operator.eventStore.sink.minio.accessKey | quote }}
+                - name: MINIO_SECRET_KEY
+                  value: {{ .Values.operator.eventStore.sink.minio.secretKey | quote }}
+                - name: MINIO_BUCKET
+                  value: {{ .Values.operator.eventStore.sink.minio.bucket | quote }}
+                - name: MINIO_PREFIX
+                  value: {{ .Values.operator.eventStore.sink.minio.prefix | quote }}
+                - name: MINIO_INSECURE
+                  value: {{ ternary "1" "0" .Values.operator.eventStore.sink.minio.insecure | quote }}
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  if [ "$MINIO_INSECURE" = "1" ]; then
+                    mc alias set rynxs "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" --insecure
+                  else
+                    mc alias set rynxs "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
+                  fi
+                  mc mirror --overwrite "{{ .Values.operator.eventStore.mountPath }}" "rynxs/$MINIO_BUCKET/$MINIO_PREFIX"
+              volumeMounts:
+                - name: eventstore
+                  mountPath: {{ .Values.operator.eventStore.mountPath | quote }}
+          volumes:
+            - name: eventstore
+              persistentVolumeClaim:
+                claimName: {{ include "rynxs.fullname" . }}-operator-eventstore
+{{- end }}
