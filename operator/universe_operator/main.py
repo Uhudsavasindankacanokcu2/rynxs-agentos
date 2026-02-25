@@ -18,6 +18,7 @@ from .engine_adapter import EngineAdapter
 from .decision_layer import DecisionLayer, actions_to_canonical, action_id
 from .executor_layer import ExecutorLayer
 from .reducer_handlers import register_handlers, UNIVERSE_AGG_ID
+from .leader_election import LeaderElector
 from engine.core import Event
 from engine.core.canonical import canonical_json_str
 import hashlib
@@ -30,6 +31,34 @@ adapter = EngineAdapter(clock)
 decision_layer = DecisionLayer()
 reducer = Reducer(global_aggregate_id=UNIVERSE_AGG_ID)
 register_handlers(reducer)
+writer_id = os.getenv("RYNXS_WRITER_ID")
+leader_elector = LeaderElector.from_env()
+
+
+def _require_leader(logger) -> bool:
+    if not leader_elector.is_enabled():
+        return True
+    if leader_elector.is_leader():
+        return True
+    logger.info("Standby: not leader, skipping reconcile")
+    return False
+
+
+def _with_writer_id(event: Event) -> Event:
+    if not writer_id:
+        return event
+    meta = dict(event.meta or {})
+    if meta.get("writer_id") == writer_id:
+        return event
+    meta["writer_id"] = writer_id
+    return Event(
+        type=event.type,
+        aggregate_id=event.aggregate_id,
+        ts=event.ts,
+        payload=event.payload,
+        meta=meta,
+        seq=event.seq,
+    )
 
 kubernetes.config.load_incluster_config()
 
@@ -40,6 +69,8 @@ def _startup(settings: kopf.OperatorSettings, **_):
 @kopf.on.create('universe.ai', 'v1alpha1', 'agents')
 @kopf.on.update('universe.ai', 'v1alpha1', 'agents')
 def agent_reconcile(spec, name, namespace, logger, meta, **_):
+    if not _require_leader(logger):
+        return
     logger.info(f"Reconciling Agent {namespace}/{name} (engine-driven)")
 
     # Extract labels from metadata
@@ -49,16 +80,17 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
     event = adapter.agent_to_event(name, namespace, spec, labels)
     logger.debug(f"Translated to event: type={event.type}, aggregate_id={event.aggregate_id}")
 
-    # Step 2: Append event to log (hash chain + sequence)
+    # Step 2: Append event to log (hash chain + sequence, CAS retry)
     try:
-        event_stored = event_store.append(event)
+        append_result = event_store.append_with_retry(_with_writer_id(event))
+        event_stored = append_result.event
         logger.info(f"Logged event seq={event_stored.seq}, hash_chain=OK")
     except Exception as e:
         logger.error(f"Failed to append event: {e}")
         raise
 
     # Capture trigger event hash for decision ledger
-    trigger_event_hash = event_store.get_event_hash(event_stored.seq)
+    trigger_event_hash = append_result.event_hash or event_store.get_event_hash(event_stored.seq)
     if not trigger_event_hash:
         raise ValueError(f"Missing event_hash for seq={event_stored.seq}")
 
@@ -84,7 +116,7 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
         actions_canonical = actions_to_canonical(actions)
         actions_json = canonical_json_str(actions_canonical)
         actions_hash = hashlib.sha256(actions_json.encode("utf-8")).hexdigest()
-        decision_event = Event(
+        decision_event = _with_writer_id(Event(
             type="ActionsDecided",
             aggregate_id=event_stored.aggregate_id,
             ts=clock.now(),
@@ -99,8 +131,8 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
                 "action_ids": [action_id(a) for a in actions],
             },
             meta={"source": "decision_layer"},
-        )
-        event_store.append(decision_event)
+        ))
+        event_store.append_with_retry(decision_event)
     except Exception as e:
         logger.error(f"Failed to log ActionsDecided: {e}")
         raise
@@ -125,6 +157,8 @@ def agent_reconcile_legacy(spec, name, namespace, logger, **_):
 @kopf.on.create('universe.ai', 'v1alpha1', 'tasks')
 @kopf.on.update('universe.ai', 'v1alpha1', 'tasks')
 def task_reconcile(spec, name, namespace, status, logger, **_):
+    if not _require_leader(logger):
+        return
     logger.info(f"Reconciling Task {namespace}/{name}")
     controller = TaskController(namespace, logger)
 
@@ -145,6 +179,8 @@ def task_reconcile(spec, name, namespace, status, logger, **_):
 @kopf.on.create('universe.ai', 'v1alpha1', 'teams')
 @kopf.on.update('universe.ai', 'v1alpha1', 'teams')
 def team_reconcile(spec, name, namespace, logger, **_):
+    if not _require_leader(logger):
+        return
     logger.info(f"Reconciling Team {namespace}/{name}")
     controller = TeamController(namespace, logger)
     status = controller.reconcile_team(name, spec)
@@ -152,6 +188,8 @@ def team_reconcile(spec, name, namespace, logger, **_):
 
 @kopf.on.create('universe.ai', 'v1alpha1', 'messages')
 def message_reconcile(spec, name, namespace, logger, **_):
+    if not _require_leader(logger):
+        return
     logger.info(f"Processing Message {namespace}/{name}")
     controller = MessageController(namespace, logger)
     status = controller.process_message(name, spec)
@@ -160,6 +198,8 @@ def message_reconcile(spec, name, namespace, logger, **_):
 @kopf.on.create('universe.ai', 'v1alpha1', 'metrics')
 @kopf.on.update('universe.ai', 'v1alpha1', 'metrics')
 def metric_reconcile(spec, name, namespace, logger, **_):
+    if not _require_leader(logger):
+        return
     logger.info(f"Processing Metric {namespace}/{name}")
     controller = MetricController(namespace, logger)
     status = controller.process_metric(name, spec)

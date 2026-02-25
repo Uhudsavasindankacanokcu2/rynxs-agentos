@@ -23,6 +23,13 @@ operator:
     name: rynxs-operator
   rbac:
     create: true
+  writerId: ""
+  leaderElection:
+    enabled: false
+    leaseName: rynxs-operator-leader
+    leaseDurationSeconds: 30
+    renewDeadlineSeconds: 20
+    retryPeriodSeconds: 5
 
 minio:
   enabled: true

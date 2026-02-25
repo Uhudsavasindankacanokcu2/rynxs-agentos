@@ -51,6 +51,7 @@ class ExecutorLayer:
         self.event_store = event_store
         self.clock = clock
         self.logger = logger
+        self.writer_id = os.getenv("RYNXS_WRITER_ID")
 
         # K8s API clients
         try:
@@ -62,6 +63,13 @@ class ExecutorLayer:
             self.core_api = None
             self.apps_api = None
             self.net_api = None
+
+    def _meta_with_writer(self, meta: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.writer_id:
+            return meta
+        merged = dict(meta or {})
+        merged.setdefault("writer_id", self.writer_id)
+        return merged
 
     def apply(self, actions: List[Action]) -> List[Event]:
         """
@@ -100,9 +108,9 @@ class ExecutorLayer:
                         "desired_hash": result.get("desired_hash"),
                         "observed_hash": result.get("observed_hash"),
                     },
-                    meta={"executor": "k8s"},
+                    meta=self._meta_with_writer({"executor": "k8s"}),
                 )
-                stored_event = self.event_store.append(event)
+                stored_event = self.event_store.append_with_retry(event).event
                 feedback_events.append(stored_event)
                 self.logger.info(
                     f"Action {action.action_type} applied to {action.target}"
@@ -129,9 +137,9 @@ class ExecutorLayer:
                         "result_code": stable_error.get("code"),
                         "error": stable_error,
                     },
-                    meta={"executor": "k8s"},
+                    meta=self._meta_with_writer({"executor": "k8s"}),
                 )
-                stored_event = self.event_store.append(event)
+                stored_event = self.event_store.append_with_retry(event).event
                 feedback_events.append(stored_event)
 
         return feedback_events

@@ -160,7 +160,8 @@ def test_replay_equality():
             )
 
             # Append to log
-            event_stored = store.append(event)
+            append_result = store.append(event)
+            event_stored = append_result.event
 
             # Replay to get state
             replay_result = replay_events(store, reducer)
@@ -352,7 +353,8 @@ def test_real_state_replay_equivalence():
             event = adapter.agent_to_event(
                 name=f"agent-{i:03d}", namespace="universe", spec=agent_spec
             )
-            event_stored = store.append(event)
+            append_result = store.append(event)
+            event_stored = append_result.event
             state_live = reducer.apply(state_live, event_stored)
 
             # Decide + ActionsDecided
@@ -378,7 +380,8 @@ def test_real_state_replay_equivalence():
                     "action_ids": [action_id(a) for a in actions],
                 },
             )
-            decided_stored = store.append(decided)
+            decided_result = store.append(decided)
+            decided_stored = decided_result.event
             state_live = reducer.apply(state_live, decided_stored)
 
             # Simulate feedback (applied)
@@ -395,7 +398,8 @@ def test_real_state_replay_equivalence():
                         "result_code": "OK",
                     },
                 )
-                feedback_stored = store.append(feedback)
+                feedback_result = store.append(feedback)
+                feedback_stored = feedback_result.event
                 state_live = reducer.apply(state_live, feedback_stored)
 
         # Replay full log

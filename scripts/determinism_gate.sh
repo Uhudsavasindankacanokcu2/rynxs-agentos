@@ -8,6 +8,7 @@ export PYTHONNOUSERSITE=1
 TMPDIR="${TMPDIR:-/tmp}"
 export TMPDIR
 export RYNXS_OPERATOR_PATH="$ROOT/operator/universe_operator"
+export RYNXS_WRITER_ID="ci"
 
 filter_err() {
   grep -vE "xcrun_db-|couldn't create cache file.*xcrun_db" "$1" >&2 || true
@@ -25,7 +26,11 @@ run_py() {
   return 1
 }
 
-if run_py python3 -m pytest "$ROOT/engine/tests/test_operator_determinism.py" -q; then
+if run_py python3 -m pytest \
+  "$ROOT/engine/tests/test_operator_determinism.py" \
+  "$ROOT/engine/tests/test_multiwriter_append.py" \
+  "$ROOT/engine/tests/test_leader_election.py" \
+  -q; then
   exit 0
 fi
 

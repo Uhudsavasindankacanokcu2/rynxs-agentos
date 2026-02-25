@@ -7,12 +7,13 @@ This module provides:
 - Integrity: Hash chain verification
 """
 
-from .store import EventStore
+from .store import EventStore, AppendResult
 from .file_store import FileEventStore
 from .integrity import ZERO_HASH, hash_event, chain_record
 
 __all__ = [
     "EventStore",
+    "AppendResult",
     "FileEventStore",
     "ZERO_HASH",
     "hash_event",

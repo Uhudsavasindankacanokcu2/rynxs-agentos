@@ -10,7 +10,7 @@ from typing import Iterator, Optional, Tuple
 from ..core.events import Event
 from ..core.canonical import canonical_json_str
 from ..core.errors import EventStoreError
-from .store import EventStore
+from .store import EventStore, AppendResult
 from .integrity import ZERO_HASH, chain_record
 
 try:
@@ -69,7 +69,7 @@ class FileEventStore(EventStore):
 
         return last_seq, last_hash
 
-    def append(self, event: Event) -> Event:
+    def append(self, event: Event, expected_prev_hash: Optional[str] = None) -> AppendResult:
         """
         Append event to log with hash chain.
 
@@ -77,7 +77,7 @@ class FileEventStore(EventStore):
             event: Event to append (seq will be assigned)
 
         Returns:
-            Event with seq assigned
+            AppendResult with commit/ conflict info
 
         Raises:
             EventStoreError: If append fails
@@ -88,6 +88,20 @@ class FileEventStore(EventStore):
                     fcntl.flock(f.fileno(), fcntl.LOCK_EX)
 
                 last_seq, last_hash = self._last_seq_and_hash(f)
+
+                if expected_prev_hash is not None and expected_prev_hash != last_hash:
+                    if fcntl:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    return AppendResult(
+                        event=event,
+                        seq=None,
+                        event_hash=None,
+                        prev_hash=None,
+                        committed=False,
+                        conflict=True,
+                        observed_prev_hash=last_hash,
+                    )
+
                 seq = last_seq + 1
 
                 # Create new event with assigned seq
@@ -115,7 +129,15 @@ class FileEventStore(EventStore):
         except OSError as ex:
             raise EventStoreError(str(ex)) from ex
 
-        return e2
+        return AppendResult(
+            event=e2,
+            seq=seq,
+            event_hash=rec.get("event_hash"),
+            prev_hash=last_hash,
+            committed=True,
+            conflict=False,
+            observed_prev_hash=last_hash,
+        )
 
     def read(self, aggregate_id: Optional[str] = None, from_seq: int = 0) -> Iterator[Event]:
         """
@@ -164,3 +186,8 @@ class FileEventStore(EventStore):
                 if ev.get("seq") == seq:
                     return rec.get("event_hash")
         return None
+
+    def get_last_hash(self) -> Optional[str]:
+        with open(self.path, "rb") as f:
+            _, last_hash = self._last_seq_and_hash(f)
+        return last_hash
