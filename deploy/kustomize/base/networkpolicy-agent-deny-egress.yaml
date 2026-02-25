@@ -1,12 +1,10 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: deny-egress-universe-agent
+  name: agent-deny-egress
   namespace: universe
 spec:
-  podSelector:
-    matchLabels:
-      app: universe-agent
+  podSelector: {}
   policyTypes:
     - Egress
   egress: []

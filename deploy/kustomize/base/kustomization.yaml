@@ -5,9 +5,9 @@ namespace: universe
 resources:
   - ../../../crds
   - namespace.yaml
-  - operator.yaml
-  - minio.yaml
   - gvisor-runtimeclass.yaml
   - networkpolicy-agent-deny-egress.yaml
   - networkpolicy-agent-allow-egress.yaml
   - networkpolicy-sandbox-deny-egress.yaml
+  - minio.yaml
+  - operator.yaml
