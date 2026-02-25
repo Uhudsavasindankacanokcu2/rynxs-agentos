@@ -18,7 +18,7 @@ bootstrap()
 from engine.log import FileEventStore
 from engine.replay import replay
 from engine.core import Reducer
-from engine.verify import verify_actions_decided_pointers
+from engine.verify import verify_actions_decided_pointers, build_decision_proof
 from engine.query import list_agents, get_drift
 from engine.core.state import UniverseState
 
@@ -323,7 +323,22 @@ def main() -> int:
     parser.add_argument("--checkpoints-dir", help="Directory with checkpoints")
     parser.add_argument("--pubkey", help="Public key PEM for signature verification")
     parser.add_argument("--summary", action="store_true", help="Emit compact summary")
+    parser.add_argument("--proof", action="store_true", help="Emit decision proof JSON")
+    parser.add_argument("--at-seq", type=int, help="Trigger event seq for proof")
     args = parser.parse_args()
+
+    if args.proof:
+        if args.format not in ("json",):
+            raise SystemExit("--proof requires --format json")
+        proof = build_decision_proof(
+            args.log, at_seq=args.at_seq, checkpoints_dir=args.checkpoints_dir, pubkey_path=args.pubkey
+        )
+        output = json.dumps(proof, sort_keys=True, indent=2)
+        if args.out:
+            Path(args.out).write_text(output, encoding="utf-8")
+        else:
+            print(output)
+        return 0 if proof.get("valid", False) else 2
 
     hash_chain = _hash_chain_verify(args.log)
     pointers = verify_actions_decided_pointers(args.log).__dict__

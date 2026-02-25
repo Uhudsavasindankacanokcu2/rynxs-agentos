@@ -49,6 +49,20 @@ scripts/engine_cli.sh audit_report \
   --pubkey /path/to/public.pem
 ```
 
+Summary mode (compact):
+
+```bash
+scripts/engine_cli.sh audit_report --log /path/to/operator-events.log --summary --format json
+scripts/engine_cli.sh audit_report --log /path/to/operator-events.log --summary --format text
+```
+
+Proof export:
+
+```bash
+scripts/engine_cli.sh audit_report --log /path/to/operator-events.log --proof --format json --out /tmp/proof.json
+scripts/engine_cli.sh audit_report --log /path/to/operator-events.log --proof --at-seq 0 --format json --out /tmp/proof-0.json
+```
+
 ### verify_pointers
 Verify ActionsDecided pointers against hash-chain.
 

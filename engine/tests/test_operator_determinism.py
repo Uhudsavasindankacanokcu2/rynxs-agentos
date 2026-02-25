@@ -25,7 +25,7 @@ from engine.log.integrity import hash_event, ZERO_HASH
 from engine.replay import replay as replay_events
 from engine.core.clock import DeterministicClock
 from engine.core.canonical import canonical_json_str
-from engine.verify import verify_actions_decided_pointers
+from engine.verify import verify_actions_decided_pointers, build_decision_proof
 
 # Import operator components (avoid name conflict with Python's operator module)
 import importlib.util
@@ -519,6 +519,31 @@ def test_verify_actions_decided_pointers_fail():
     print("  ✓ Pointer verification failed as expected")
 
 
+def test_decision_proof_pass():
+    """
+    Test J: Decision proof passes on small fixture.
+    """
+    print("\nTest J: Decision proof (pass)")
+    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
+    proof = build_decision_proof(str(fixture_path), at_seq=0)
+    assert proof.get("valid") is True
+    print("  ✓ Decision proof passed")
+
+
+def test_decision_proof_fail():
+    """
+    Test K: Decision proof fails on tampered fixture.
+    """
+    print("\nTest K: Decision proof (fail)")
+    fixture_path = Path(__file__).parent / "fixtures" / "operator_log_small.jsonl"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dst = Path(tmpdir) / "tampered.jsonl"
+        _tamper_pointer_fixture(fixture_path, dst)
+        proof = build_decision_proof(str(dst), at_seq=0)
+        assert proof.get("valid") is False
+    print("  ✓ Decision proof failed as expected")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("OPERATOR DETERMINISM TESTS (SPRINT C)")
@@ -533,6 +558,8 @@ if __name__ == "__main__":
     test_golden_log_weird_fixture_replay()
     test_verify_actions_decided_pointers_pass()
     test_verify_actions_decided_pointers_fail()
+    test_decision_proof_pass()
+    test_decision_proof_fail()
 
     print("\n" + "=" * 60)
     print("ALL DETERMINISM TESTS PASSED")
