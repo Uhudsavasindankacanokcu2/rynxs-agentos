@@ -215,6 +215,59 @@ operator:
 ```
 - This creates one CronJob per replica, targeting `/pod-<ordinal>` in the bucket.
 
+### StatefulSet MinIO Sink Runbook (Enterprise)
+
+**Goal**: Each StatefulSet pod’s eventstore PVC is mirrored to MinIO/S3 for long‑term audit retention.
+
+**Topology**
+- `rynxs-operator-0` PVC → `s3://<bucket>/<prefix>/pod-0`
+- `rynxs-operator-1` PVC → `s3://<bucket>/<prefix>/pod-1`
+- `rynxs-operator-2` PVC → `s3://<bucket>/<prefix>/pod-2`
+
+**Helm values (example)**
+```yaml
+operator:
+  kind: statefulset
+  hashVersion: "v2"
+  writerId: "" # default = POD_NAME (stable for StatefulSet)
+  leaderElection:
+    enabled: true
+  eventStore:
+    persistence:
+      enabled: true
+      size: "50Gi"
+    sink:
+      minio:
+        enabled: true
+        endpoint: http://minio:9000
+        bucket: "rynxs-eventstore"
+        accessKey: "MINIO_ACCESS_KEY"
+        secretKey: "MINIO_SECRET_KEY"
+        prefix: "prod"
+        schedule: "*/15 * * * *"
+        statefulset:
+          enabled: true
+```
+
+**Operational checks**
+- CronJobs exist (one per replica):
+  ```bash
+  kubectl get cronjobs -n universe | grep eventstore-sink
+  ```
+- Job logs show successful `mc mirror`:
+  ```bash
+  kubectl logs -n universe -l job-name=rynxs-eventstore-sink-0
+  ```
+- Bucket contents include `/pod-<ordinal>` prefixes.
+
+**Retention**
+- Configure MinIO/S3 lifecycle rules on the bucket (e.g., 90 days).
+- Retention is managed by the object store (not the chart).
+
+**Failure modes**
+- If a CronJob fails: check MinIO creds, endpoint reachability, and PVC mount.
+- If two pods write to the same prefix: ensure `prefix` is set and `statefulset.enabled` is true.
+
 ### Storage Classes
 
 Configure PVC storage class for agent workspaces:
