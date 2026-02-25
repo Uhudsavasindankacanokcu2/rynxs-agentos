@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rynxs-dashboard
+  namespace: universe
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: rynxs-dashboard-reader
+rules:
+  - apiGroups: ["universe.ai"]
+    resources: ["agents", "tasks", "teams", "metrics", "messages"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["universe.ai"]
+    resources: ["agents/status", "tasks/status", "teams/status"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rynxs-dashboard-reader
+subjects:
+  - kind: ServiceAccount
+    name: rynxs-dashboard
+    namespace: universe
+roleRef:
+  kind: ClusterRole
+  name: rynxs-dashboard-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rynxs-dashboard
+  namespace: universe
+  labels:
+    app: rynxs-dashboard
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rynxs-dashboard
+  template:
+    metadata:
+      labels:
+        app: rynxs-dashboard
+    spec:
+      serviceAccountName: rynxs-dashboard
+      containers:
+        - name: dashboard
+          image: ghcr.io/uhudsavasindankacanokcu2/rynxs-dashboard:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rynxs-dashboard
+  namespace: universe
+  labels:
+    app: rynxs-dashboard
+spec:
+  type: ClusterIP
+  selector:
+    app: rynxs-dashboard
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http

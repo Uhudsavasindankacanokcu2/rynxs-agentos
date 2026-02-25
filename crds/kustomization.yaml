@@ -5,3 +5,6 @@ resources:
   - universe.ai_sessions.yaml
   - universe.ai_universes.yaml
   - universe.ai_tasks.yaml
+  - universe.ai_teams.yaml
+  - universe.ai_metrics.yaml
+  - universe.ai_messages.yaml

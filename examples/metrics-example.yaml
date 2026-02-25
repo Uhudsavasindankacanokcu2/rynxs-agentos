@@ -1,0 +1,45 @@
+apiVersion: universe.ai/v1alpha1
+kind: Metric
+metadata:
+  name: agent-worker-001-2024-q1
+  namespace: universe
+spec:
+  agent: agent-worker-001
+  period: 2024-Q1
+  metrics:
+    tasksCompleted: 127
+    tasksFailed: 3
+    averageCompletionTime: "2h15m"
+    errorRate: 0.023
+    uptime: "99.8%"
+    auditScore: 0.95
+  toolUsage:
+    kubectl: 450
+    python: 320
+    git: 280
+  zoneContributions:
+    engineering: 0.85
+    operations: 0.15
+---
+apiVersion: universe.ai/v1alpha1
+kind: Metric
+metadata:
+  name: agent-manager-001-2024-q1
+  namespace: universe
+spec:
+  agent: agent-manager-001
+  period: 2024-Q1
+  metrics:
+    tasksCompleted: 45
+    tasksFailed: 1
+    averageCompletionTime: "4h30m"
+    errorRate: 0.022
+    uptime: "99.9%"
+    auditScore: 0.98
+  toolUsage:
+    kubectl: 200
+    python: 150
+    git: 180
+  zoneContributions:
+    engineering: 0.60
+    management: 0.40
