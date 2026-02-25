@@ -144,6 +144,12 @@ def reconcile_task(
 - Update relevant docs with code changes
 - Keep README.md up to date
 
+#### Release Notes & Determinism Checklist
+
+For changes that touch the deterministic engine, decision layer, or executor:
+- Write release notes using `docs/RELEASE_NOTES_TEMPLATE.md`
+- Complete the determinism checklist in `docs/RELEASE_CHECKLIST.md`
+
 ### Testing
 
 All contributions must include tests:
