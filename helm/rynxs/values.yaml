@@ -59,3 +59,60 @@ gvisor:
 crds:
   install: true
   keep: true
+
+dashboard:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ghcr.io/uhudsavasindankacanokcu2/rynxs-dashboard
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: false
+    className: nginx
+    annotations: {}
+    hosts:
+      - host: rynxs.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+monitoring:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+podSecurityPolicy:
+  enabled: false
+
+autoscaling:
+  operator:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 80
+  dashboard:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
