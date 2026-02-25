@@ -14,7 +14,8 @@ if ! command -v helm >/dev/null 2>&1; then
   exit 2
 fi
 
-OUT="$(mktemp /tmp/rynxs-helm.XXXXXX.yaml)"
+TMPDIR="${TMPDIR:-/tmp}"
+OUT="$(mktemp "$TMPDIR/rynxs-helm.XXXXXX")"
 helm template rynxs "$ROOT/helm/rynxs" -f "$VALUES_FILE" > "$OUT"
 
 grep -q "kind: StatefulSet" "$OUT" || {
