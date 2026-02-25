@@ -1,0 +1,84 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: metrics.universe.ai
+spec:
+  group: universe.ai
+  scope: Namespaced
+  names:
+    plural: metrics
+    singular: metric
+    kind: Metric
+    shortNames:
+      - met
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - agent
+                - period
+              properties:
+                agent:
+                  type: string
+                  description: Agent name
+                period:
+                  type: string
+                  description: Reporting period (e.g. 2024-Q1, 2024-02)
+                metrics:
+                  type: object
+                  properties:
+                    tasksCompleted:
+                      type: integer
+                      description: Number of tasks completed
+                    tasksFailed:
+                      type: integer
+                      description: Number of tasks failed
+                    averageCompletionTime:
+                      type: string
+                      description: Average task completion time
+                    errorRate:
+                      type: number
+                      format: double
+                      description: Error rate (0.0-1.0)
+                    auditScore:
+                      type: number
+                      format: double
+                      description: Compliance score (0.0-1.0)
+                    uptime:
+                      type: string
+                      description: Agent uptime percentage
+                  description: Performance metrics
+                zoneContributions:
+                  type: object
+                  additionalProperties:
+                    type: number
+                    format: double
+                  description: Contribution by zone (zone -> percentage)
+                toolUsage:
+                  type: object
+                  additionalProperties:
+                    type: integer
+                  description: Tool usage count (tool -> count)
+      additionalPrinterColumns:
+        - name: Agent
+          type: string
+          jsonPath: .spec.agent
+        - name: Period
+          type: string
+          jsonPath: .spec.period
+        - name: Completed
+          type: integer
+          jsonPath: .spec.metrics.tasksCompleted
+        - name: Failed
+          type: integer
+          jsonPath: .spec.metrics.tasksFailed
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

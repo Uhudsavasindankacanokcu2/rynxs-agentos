@@ -24,6 +24,32 @@ spec:
             spec:
               type: object
               properties:
+                role:
+                  type: string
+                  enum: ["worker", "manager", "director"]
+                  default: "worker"
+                  description: Agent role in organizational hierarchy
+                team:
+                  type: string
+                  description: Team this agent belongs to
+                manages:
+                  type: array
+                  items:
+                    type: string
+                  description: List of agent names this agent manages (for managers/directors)
+                permissions:
+                  type: object
+                  properties:
+                    canAssignTasks:
+                      type: boolean
+                      default: false
+                    canAccessAuditLogs:
+                      type: boolean
+                      default: false
+                    canManageTeam:
+                      type: boolean
+                      default: false
+                  description: Role-based permissions
                 image:
                   type: object
                   properties:
