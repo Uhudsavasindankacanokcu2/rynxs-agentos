@@ -165,6 +165,65 @@ cognition:
   learningRate: 0.6
 ```
 
+#### role
+
+Agent role in organizational hierarchy. Default: `worker`.
+
+```yaml
+spec:
+  role: string  # worker, manager, director
+```
+
+Example:
+```yaml
+role: manager
+```
+
+#### team
+
+Team this agent belongs to.
+
+```yaml
+spec:
+  team: string  # Team name reference
+```
+
+Example:
+```yaml
+team: backend-team
+```
+
+#### manages
+
+List of agent names this agent manages (for managers/directors).
+
+```yaml
+spec:
+  manages:
+    - agent-worker-001
+    - agent-worker-002
+```
+
+#### permissions
+
+Role-based permissions for agent capabilities.
+
+```yaml
+spec:
+  permissions:
+    canAssignTasks: boolean      # Can assign tasks to other agents
+    canManageTeam: boolean        # Can manage team members
+    canAccessAuditLogs: boolean   # Can access audit logs
+```
+
+Example:
+```yaml
+permissions:
+  canAssignTasks: true
+  canManageTeam: true
+  canAccessAuditLogs: false
+```
+
 ### Status Fields
 
 #### conditions
@@ -437,6 +496,271 @@ status:
   error: "Tool execution failed: permission denied"
 ```
 
+## Team CRD
+
+API Group: `universe.ai/v1alpha1`
+Kind: `Team`
+Scope: `Namespaced`
+
+### Spec Fields
+
+#### name
+
+Team display name (required).
+
+```yaml
+spec:
+  name: "Backend Engineering"
+```
+
+#### zone
+
+Zone/department this team belongs to (required).
+
+```yaml
+spec:
+  zone: "engineering"
+```
+
+#### lead
+
+Agent name who leads this team.
+
+```yaml
+spec:
+  lead: "agent-manager-001"
+```
+
+#### members
+
+List of agent names in this team.
+
+```yaml
+spec:
+  members:
+    - agent-worker-001
+    - agent-worker-002
+    - agent-worker-003
+```
+
+#### resources
+
+Team shared resources.
+
+```yaml
+spec:
+  resources:
+    sharedWorkspace: string    # Shared PVC name for team collaboration
+    sharedKnowledge: string    # Shared knowledge base location
+```
+
+Example:
+```yaml
+resources:
+  sharedWorkspace: "backend-pvc"
+  sharedKnowledge: "/mnt/knowledge/backend"
+```
+
+#### communication
+
+Communication policies.
+
+```yaml
+spec:
+  communication:
+    allowInternalChat: boolean    # Allow team members to communicate
+    allowCrossTeam: []string      # Teams this team can communicate with
+```
+
+Example:
+```yaml
+communication:
+  allowInternalChat: true
+  allowCrossTeam:
+    - frontend-team
+    - devops-team
+```
+
+### Status Fields
+
+#### phase
+
+Team operational status: `Active`, `Inactive`, `Dissolved`.
+
+#### memberCount
+
+Current number of team members.
+
+#### activeMembers
+
+Number of currently active agents.
+
+## Metric CRD
+
+API Group: `universe.ai/v1alpha1`
+Kind: `Metric`
+Scope: `Namespaced`
+
+### Spec Fields
+
+#### agent
+
+Agent name (required).
+
+```yaml
+spec:
+  agent: "agent-worker-001"
+```
+
+#### period
+
+Reporting period (required). Format: YYYY-QN or YYYY-MM.
+
+```yaml
+spec:
+  period: "2024-Q1"
+```
+
+#### metrics
+
+Performance metrics.
+
+```yaml
+spec:
+  metrics:
+    tasksCompleted: int           # Number of tasks completed
+    tasksFailed: int              # Number of tasks failed
+    averageCompletionTime: string # Average task completion time
+    errorRate: float              # Error rate (0.0-1.0)
+    uptime: string                # Agent uptime percentage
+    auditScore: float             # Compliance score (0.0-1.0)
+```
+
+Example:
+```yaml
+metrics:
+  tasksCompleted: 127
+  tasksFailed: 3
+  averageCompletionTime: "2h15m"
+  errorRate: 0.023
+  uptime: "99.8%"
+  auditScore: 0.95
+```
+
+#### toolUsage
+
+Tool usage count (tool name to count mapping).
+
+```yaml
+spec:
+  toolUsage:
+    kubectl: 450
+    python: 320
+    git: 280
+```
+
+#### zoneContributions
+
+Contribution by zone (zone name to percentage mapping).
+
+```yaml
+spec:
+  zoneContributions:
+    engineering: 0.85
+    operations: 0.15
+```
+
+## Message CRD
+
+API Group: `universe.ai/v1alpha1`
+Kind: `Message`
+Scope: `Namespaced`
+
+### Spec Fields
+
+#### from
+
+Sender agent name (required).
+
+```yaml
+spec:
+  from: "agent-manager-001"
+```
+
+#### to
+
+Recipient agent name (optional for broadcasts).
+
+```yaml
+spec:
+  to: "agent-worker-001"
+```
+
+#### channel
+
+Channel/team name for group messages.
+
+```yaml
+spec:
+  channel: "backend-team"
+```
+
+#### content
+
+Message content (required).
+
+```yaml
+spec:
+  content: "Task assigned: Implement authentication module"
+```
+
+#### priority
+
+Message priority level. Default: `normal`.
+
+```yaml
+spec:
+  priority: high  # low, normal, high, urgent
+```
+
+#### thread
+
+Thread ID for conversation grouping.
+
+```yaml
+spec:
+  thread: "task-123"
+```
+
+#### metadata
+
+Additional message metadata.
+
+```yaml
+spec:
+  metadata:
+    taskRef: "task-auth-feature"
+    deadline: "2024-03-15T18:00:00Z"
+```
+
+### Status Fields
+
+#### delivered
+
+Whether message was delivered.
+
+#### deliveredAt
+
+Delivery timestamp (ISO 8601).
+
+#### read
+
+Whether message was read.
+
+#### readAt
+
+Read timestamp (ISO 8601).
+
 ## Session CRD
 
 API Group: `universe.ai/v1alpha1`
@@ -483,9 +807,15 @@ The operator requires the following permissions:
 
 ### Cluster-scoped:
 - `universe.ai/agents`: get, list, watch, create, update, patch, delete
+- `universe.ai/tasks`: get, list, watch, create, update, patch, delete
+- `universe.ai/teams`: get, list, watch, create, update, patch, delete
+- `universe.ai/metrics`: get, list, watch, create, update, patch, delete
+- `universe.ai/messages`: get, list, watch, create, update, patch, delete
 - `universe.ai/sessions`: get, list, watch, create, update, patch, delete
 - `universe.ai/universes`: get, list, watch, create, update, patch, delete
 - `universe.ai/agents/status`: get, update, patch
+- `universe.ai/tasks/status`: get, update, patch
+- `universe.ai/teams/status`: get, update, patch
 
 ### Namespace-scoped (universe):
 - `pods`: get, list, watch, create, delete
@@ -494,6 +824,7 @@ The operator requires the following permissions:
 - `persistentvolumeclaims`: get, list, watch, create
 - `deployments`: get, list, watch, create, patch, update
 - `jobs`: get, list, watch, create, delete
+- `events`: get, list, create, patch
 
 ## Webhook Validation
 
