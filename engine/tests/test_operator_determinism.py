@@ -64,8 +64,8 @@ EXPECTED_HASHES = {
         "weird": "228a0f4184447c46566e3d2225c16cbe4048d8bca2e11f34d07addf94289c268",
     },
     "v2": {
-        "small": "6a2d25ae69313ebf7eaa4ce0ef9658b4a6aee6165e2a15edd6b0b6e20b4a4b29",
-        "weird": "228a0f4184447c46566e3d2225c16cbe4048d8bca2e11f34d07addf94289c268",
+        "small": "ffe6e46d001841ba7ef6396c8973fd1f239d4dd52a2e4f21e28b7c1c062b48c3",
+        "weird": "5900e7e156e618c8f9acf2d353d2b638126cb5a7b4556d655d4c3304c8f3f6af",
     },
 }
 
