@@ -1,0 +1,15 @@
+{{- if eq .Values.operator.kind "statefulset" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rynxs.fullname" . }}-operator-headless
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "rynxs.operator.labels" . | nindent 4 }}
+    app: rynxs-operator
+spec:
+  clusterIP: None
+  selector:
+    app: rynxs-operator
+    {{- include "rynxs.selectorLabels" . | nindent 4 }}
+{{- end }}

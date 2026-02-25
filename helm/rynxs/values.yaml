@@ -6,6 +6,7 @@ namespace:
   name: universe
 
 operator:
+  kind: "deployment" # deployment | statefulset
   replicaCount: 1
   image:
     repository: ghcr.io/uhudsavasindankacanokcu2/rynxs-operator

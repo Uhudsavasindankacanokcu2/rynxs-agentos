@@ -1,4 +1,4 @@
-{{- if .Values.operator.eventStore.persistence.enabled }}
+{{- if and (eq .Values.operator.kind "deployment") .Values.operator.eventStore.persistence.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

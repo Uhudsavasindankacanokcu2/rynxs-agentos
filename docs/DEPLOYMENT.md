@@ -95,6 +95,7 @@ Use at least 2 replicas with leader election enabled:
 
 ```yaml
 operator:
+  kind: deployment
   replicaCount: 2
   leaderElection:
     enabled: true
@@ -109,6 +110,26 @@ Notes:
 - `leaderElection` keeps a single writer active while standby pods stay idle.
 - `eventStore.persistence` mounts a PVC at `/var/log/rynxs` for durable logs.
 - Set `operator.writerId` if you want a stable writer identity across restarts.
+
+### StatefulSet + Stable Writer Identity (Enterprise)
+
+For audit-grade writer identity, use a StatefulSet (pod names are stable across restarts):
+
+```yaml
+operator:
+  kind: statefulset
+  replicaCount: 3
+  writerId: "" # default = POD_NAME (stable: <release>-operator-0/1/2)
+  leaderElection:
+    enabled: true
+  eventStore:
+    persistence:
+      enabled: true
+```
+
+Notes:
+- `writerId` empty → `POD_NAME` is used; with StatefulSet this is stable.
+- MinIO sink CronJob is only wired for `deployment` mode in the default chart.
 
 ### Event Store Rotation + MinIO Sink (Optional)
 

@@ -1,4 +1,4 @@
-{{- if and .Values.operator.eventStore.sink.minio.enabled .Values.operator.eventStore.persistence.enabled }}
+{{- if and (eq .Values.operator.kind "deployment") .Values.operator.eventStore.sink.minio.enabled .Values.operator.eventStore.persistence.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:

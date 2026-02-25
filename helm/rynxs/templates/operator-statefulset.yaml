@@ -1,6 +1,6 @@
-{{- if eq .Values.operator.kind "deployment" }}
+{{- if eq .Values.operator.kind "statefulset" }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "rynxs.fullname" . }}-operator
   namespace: {{ .Values.namespace.name }}
@@ -8,6 +8,7 @@ metadata:
     {{- include "rynxs.operator.labels" . | nindent 4 }}
     app: rynxs-operator
 spec:
+  serviceName: {{ include "rynxs.fullname" . }}-operator-headless
   replicas: {{ .Values.operator.replicaCount }}
   selector:
     matchLabels:
@@ -93,12 +94,23 @@ spec:
           volumeMounts:
             - name: eventstore
               mountPath: {{ .Values.operator.eventStore.mountPath | quote }}
+      {{- if not .Values.operator.eventStore.persistence.enabled }}
       volumes:
         - name: eventstore
-          {{- if .Values.operator.eventStore.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ include "rynxs.fullname" . }}-operator-eventstore
-          {{- else }}
           emptyDir: {}
-          {{- end }}
+      {{- end }}
+  {{- if .Values.operator.eventStore.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: eventstore
+      spec:
+        accessModes:
+          {{- toYaml .Values.operator.eventStore.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.operator.eventStore.persistence.size | quote }}
+        {{- if .Values.operator.eventStore.persistence.storageClass }}
+        storageClassName: {{ .Values.operator.eventStore.persistence.storageClass | quote }}
+        {{- end }}
+  {{- end }}
 {{- end }}
