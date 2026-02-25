@@ -15,6 +15,7 @@ from typing import List, Dict, Any
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
 
 from engine.core import State, Event
+from engine.core.canonical import canonical_json_str, canonicalize
 
 
 @dataclass
@@ -106,7 +107,8 @@ class DecisionLayer:
             List of actions to execute
         """
         if event.type == "AgentObserved":
-            return self._decide_agent_observed(state, event)
+            actions = self._decide_agent_observed(state, event)
+            return self._stable_actions(actions)
         elif event.type == "ActionApplied":
             # No further actions needed for feedback events
             return []
@@ -116,6 +118,19 @@ class DecisionLayer:
         else:
             # Unknown event type - no action
             return []
+
+    def _stable_actions(self, actions: List[Action]) -> List[Action]:
+        """
+        Ensure deterministic ordering of actions.
+        """
+        def _key(a: Action):
+            try:
+                params_key = canonical_json_str(a.params)
+            except Exception:
+                params_key = str(a.params)
+            return (a.action_type, a.target, params_key)
+
+        return sorted(actions, key=_key)
 
     def _decide_agent_observed(self, state: State, event: Event) -> List[Action]:
         """
@@ -146,7 +161,7 @@ class DecisionLayer:
             EnsureConfigMapAction(
                 name=f"{name}-spec",
                 namespace=namespace,
-                data={"agent.json": str(spec)},  # In production, use JSON.dumps
+                data={"agent.json": canonical_json_str(spec)},
             )
         )
 
@@ -171,7 +186,7 @@ class DecisionLayer:
         image = f"{image_repo}:{image_tag}"
 
         # Build deployment spec (canonical, deterministic)
-        deployment_spec = {
+        deployment_spec = canonicalize({
             "replicas": 1,
             "image": image,
             "image_verify": image_spec.get("verify", False),
@@ -188,7 +203,7 @@ class DecisionLayer:
                 {"name": "workspace", "mount_path": "/workspace"},
                 {"name": "agent-spec", "mount_path": "/config", "read_only": True},
             ],
-        }
+        })
 
         actions.append(
             EnsureDeploymentAction(

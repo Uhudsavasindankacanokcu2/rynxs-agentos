@@ -12,6 +12,7 @@ Only includes stable, deterministic fields in event payload.
 import hashlib
 import sys
 import os
+import copy
 
 # Add engine to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
@@ -69,8 +70,8 @@ class EngineAdapter:
                 k: labels[k] for k in sorted(labels.keys()) if k in stable_keys
             }
 
-        # Canonical spec (sorted keys, stable structure)
-        canonical_spec = canonicalize(spec)
+        # Canonical spec (sorted keys, stable structure) with defaults applied
+        canonical_spec = self._normalize_agent_spec(spec)
 
         # Compute spec hash for change detection
         # Use canonical JSON string for deterministic hashing
@@ -98,6 +99,42 @@ class EngineAdapter:
             payload=payload,
             meta={"source": "kubernetes", "resource": "agents"},
         )
+
+    def _normalize_agent_spec(self, spec: dict) -> dict:
+        """
+        Normalize agent spec to eliminate K8s defaulting drift.
+
+        Ensures semantically identical specs produce identical payloads.
+        """
+        def _set_default(d: dict, key: str, value):
+            if key not in d or d[key] is None:
+                d[key] = value
+
+        # Defensive copy to avoid mutating caller input
+        norm = copy.deepcopy(spec or {})
+
+        # Top-level defaults
+        _set_default(norm, "role", "worker")
+
+        # Permissions defaults
+        perms = norm.get("permissions") or {}
+        _set_default(perms, "canAssignTasks", False)
+        _set_default(perms, "canAccessAuditLogs", False)
+        _set_default(perms, "canManageTeam", False)
+        norm["permissions"] = perms
+
+        # Image defaults
+        image = norm.get("image") or {}
+        _set_default(image, "tag", "latest")
+        _set_default(image, "verify", False)
+        norm["image"] = image
+
+        # Workspace defaults
+        workspace = norm.get("workspace") or {}
+        _set_default(workspace, "size", "1Gi")
+        norm["workspace"] = workspace
+
+        return canonicalize(norm)
 
     def normalize_k8s_list_order(self, items: list, key_func) -> list:
         """

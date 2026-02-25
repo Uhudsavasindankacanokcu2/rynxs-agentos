@@ -246,6 +246,58 @@ def test_event_translation_determinism():
     print(f"  ✓ spec_hash: {events[0][:50]}...")
 
 
+def test_event_translation_defaulting_equivalence():
+    """
+    Test D: K8s defaulting equivalence.
+
+    Semantically identical specs (implicit defaults vs explicit defaults)
+    must translate to identical deterministic events.
+    """
+    print("\nTest D: Event translation defaulting equivalence")
+
+    clock = DeterministicClock(current=1000)
+    adapter = EngineAdapter(clock)
+
+    spec_implicit = {
+        "team": "backend-team",
+        "permissions": {},
+        "image": {"repository": "ghcr.io/test/agent"},
+        "workspace": {},
+    }
+
+    spec_explicit = {
+        "role": "worker",
+        "team": "backend-team",
+        "permissions": {
+            "canAssignTasks": False,
+            "canAccessAuditLogs": False,
+            "canManageTeam": False,
+        },
+        "image": {
+            "repository": "ghcr.io/test/agent",
+            "tag": "latest",
+            "verify": False,
+        },
+        "workspace": {"size": "1Gi"},
+    }
+
+    ev_a = adapter.agent_to_event(
+        name="agent-test-001", namespace="universe", spec=spec_implicit
+    )
+    ev_b = adapter.agent_to_event(
+        name="agent-test-001", namespace="universe", spec=spec_explicit
+    )
+
+    payload_a = canonical_json_str(ev_a.payload)
+    payload_b = canonical_json_str(ev_b.payload)
+
+    assert (
+        payload_a == payload_b
+    ), f"Defaulting drift detected:\nimplicit={payload_a}\nexplicit={payload_b}"
+
+    print("  ✓ Implicit defaults == explicit defaults (payloads match)")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("OPERATOR DETERMINISM TESTS (SPRINT C)")
@@ -254,6 +306,7 @@ if __name__ == "__main__":
     test_decision_determinism_50_runs()
     test_replay_equality()
     test_event_translation_determinism()
+    test_event_translation_defaulting_equivalence()
 
     print("\n" + "=" * 60)
     print("ALL DETERMINISM TESTS PASSED")

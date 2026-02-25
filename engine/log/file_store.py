@@ -13,6 +13,10 @@ from ..core.errors import EventStoreError
 from .store import EventStore
 from .integrity import ZERO_HASH, chain_record
 
+try:
+    import fcntl
+except ImportError:  # Windows or unsupported platform
+    fcntl = None
 
 class FileEventStore(EventStore):
     """
@@ -44,7 +48,7 @@ class FileEventStore(EventStore):
             with open(path, "wb") as f:
                 f.write(b"")
 
-    def _last_seq_and_hash(self) -> Tuple[int, str]:
+    def _last_seq_and_hash(self, f) -> Tuple[int, str]:
         """
         Read last sequence number and hash from log.
 
@@ -55,13 +59,13 @@ class FileEventStore(EventStore):
         last_seq = -1
         last_hash = ZERO_HASH
 
-        with open(self.path, "rb") as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                rec = json.loads(line)
-                last_seq = rec["event"]["seq"]
-                last_hash = rec["event_hash"]
+        f.seek(0)
+        for line in f:
+            if not line.strip():
+                continue
+            rec = json.loads(line)
+            last_seq = rec["event"]["seq"]
+            last_hash = rec["event_hash"]
 
         return last_seq, last_hash
 
@@ -78,29 +82,36 @@ class FileEventStore(EventStore):
         Raises:
             EventStoreError: If append fails
         """
-        last_seq, last_hash = self._last_seq_and_hash()
-        seq = last_seq + 1
-
-        # Create new event with assigned seq
-        e2 = Event(
-            type=event.type,
-            aggregate_id=event.aggregate_id,
-            seq=seq,
-            ts=event.ts,
-            payload=event.payload,
-            meta=event.meta,
-        )
-
-        # Create hash chain record
-        rec = chain_record(last_hash, e2)
-        line = canonical_json_str(rec) + "\n"
-
-        # Append with fsync (durability guarantee)
         try:
-            with open(self.path, "ab") as f:
+            with open(self.path, "a+b") as f:
+                if fcntl:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+
+                last_seq, last_hash = self._last_seq_and_hash(f)
+                seq = last_seq + 1
+
+                # Create new event with assigned seq
+                e2 = Event(
+                    type=event.type,
+                    aggregate_id=event.aggregate_id,
+                    seq=seq,
+                    ts=event.ts,
+                    payload=event.payload,
+                    meta=event.meta,
+                )
+
+                # Create hash chain record
+                rec = chain_record(last_hash, e2)
+                line = canonical_json_str(rec) + "\n"
+
+                # Append with fsync (durability guarantee)
+                f.seek(0, os.SEEK_END)
                 f.write(line.encode("utf-8"))
                 f.flush()
                 os.fsync(f.fileno())
+
+                if fcntl:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         except OSError as ex:
             raise EventStoreError(str(ex)) from ex
 

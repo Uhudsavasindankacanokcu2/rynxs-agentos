@@ -109,6 +109,8 @@ class ExecutorLayer:
             except Exception as e:
                 self.logger.error(f"Failed to apply action {action.action_type}: {e}")
 
+                stable_error = self._stable_error(e)
+
                 # Log failure
                 event = Event(
                     type="ActionFailed",
@@ -117,7 +119,7 @@ class ExecutorLayer:
                     payload={
                         "action_type": action.action_type,
                         "target": action.target,
-                        "error": str(e),
+                        "error": stable_error,
                     },
                     meta={"executor": "k8s"},
                 )
@@ -125,6 +127,20 @@ class ExecutorLayer:
                 feedback_events.append(stored_event)
 
         return feedback_events
+
+    def _stable_error(self, err: Exception) -> dict:
+        """
+        Return a stable, deterministic error payload for events.
+
+        Avoids embedding raw exception strings or stack traces.
+        """
+        base = {"type": err.__class__.__name__}
+
+        # Kubernetes ApiException provides stable fields
+        if isinstance(err, client.exceptions.ApiException):
+            base["status"] = getattr(err, "status", None)
+            base["reason"] = getattr(err, "reason", None)
+        return base
 
     def _ensure_config_map(self, action: Action):
         """Create or update ConfigMap."""
