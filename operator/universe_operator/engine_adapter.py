@@ -42,7 +42,7 @@ class EngineAdapter:
         self.clock = clock
 
     def agent_to_event(
-        self, name: str, namespace: str, spec: dict, labels: dict = None
+        self, name: str, namespace: str, spec: dict, labels: dict = None, annotations: dict = None
     ) -> Event:
         """
         Translate K8s Agent to deterministic AgentObserved event.
@@ -51,12 +51,14 @@ class EngineAdapter:
         - resourceVersion, uid, timestamps
         - managedFields, status
         - generation, ownerReferences
+        - kubectl annotations (last-applied-configuration, etc.)
 
         Args:
             name: Agent name
             namespace: Agent namespace
             spec: Agent spec (will be canonicalized)
             labels: Optional labels (will be filtered and sorted)
+            annotations: Optional annotations (will be filtered and sorted)
 
         Returns:
             AgentObserved event with normalized payload
@@ -70,6 +72,17 @@ class EngineAdapter:
                 k: labels[k] for k in sorted(labels.keys()) if k in stable_keys
             }
 
+        # Normalize annotations (blocklist kubectl-managed ones)
+        normalized_annotations = {}
+        if annotations:
+            # Blocklist: exclude kubectl-managed annotations
+            blocked_prefixes = ["kubectl.kubernetes.io/", "deployment.kubernetes.io/"]
+            normalized_annotations = {
+                k: annotations[k]
+                for k in sorted(annotations.keys())
+                if not any(k.startswith(prefix) for prefix in blocked_prefixes)
+            }
+
         # Canonical spec (sorted keys, stable structure) with defaults applied
         canonical_spec = self._normalize_agent_spec(spec)
 
@@ -81,13 +94,18 @@ class EngineAdapter:
         spec_hash = hashlib.sha256(spec_str.encode("utf-8")).hexdigest()[:16]
 
         # Build normalized payload
+        # Advance logical clock deterministically (immutable clock -> rebind)
+        self.clock = self.clock.tick()
+        logical_time = self.clock.now()
+
         payload = {
             "name": name,
             "namespace": namespace,
             "labels": normalized_labels,
+            "annotations": normalized_annotations,
             "spec": canonical_spec,
             "spec_hash": spec_hash,
-            "observed_logical_time": self.clock.now(),
+            "observed_logical_time": logical_time,
         }
 
         # Aggregate ID: namespace/name (stable identifier)
@@ -96,7 +114,7 @@ class EngineAdapter:
         return Event(
             type="AgentObserved",
             aggregate_id=aggregate_id,
-            ts=self.clock.now(),
+            ts=logical_time,
             payload=payload,
             meta={"source": "kubernetes", "resource": "agents"},
         )
@@ -178,13 +196,22 @@ class EngineAdapter:
                 "namespace": metadata.get("namespace"),
             }
 
-            # Include stable labels/annotations
+            # Include stable labels
             if "labels" in metadata:
                 stable_keys = ["app", "team", "policy", "role", "network-policy"]
                 cleaned["metadata"]["labels"] = {
                     k: metadata["labels"][k]
                     for k in sorted(metadata["labels"].keys())
                     if k in stable_keys
+                }
+
+            # Include stable annotations (block kubectl-managed)
+            if "annotations" in metadata:
+                blocked_prefixes = ["kubectl.kubernetes.io/", "deployment.kubernetes.io/"]
+                cleaned["metadata"]["annotations"] = {
+                    k: metadata["annotations"][k]
+                    for k in sorted(metadata["annotations"].keys())
+                    if not any(k.startswith(prefix) for prefix in blocked_prefixes)
                 }
 
         # Copy spec (canonical)

@@ -230,7 +230,7 @@ class DecisionLayer:
         )
 
         # Decision 4: NetworkPolicy based on role
-        role = spec.get("role", "worker")
+        role = spec.get("role", "worker").lower()
         permissions = spec.get("permissions", {})
 
         # Directors/managers get egress permissions

@@ -275,7 +275,9 @@ def test_event_translation_determinism():
         event = adapter.agent_to_event(
             name="agent-test-001", namespace="universe", spec=agent_spec
         )
-        events.append(canonical_json_str(event.payload))
+        payload = dict(event.payload)
+        payload.pop("observed_logical_time", None)
+        events.append(canonical_json_str(payload))
 
     # All payloads must be identical
     unique_payloads = set(events)
@@ -329,8 +331,12 @@ def test_event_translation_defaulting_equivalence():
         name="agent-test-001", namespace="universe", spec=spec_explicit
     )
 
-    payload_a = canonical_json_str(ev_a.payload)
-    payload_b = canonical_json_str(ev_b.payload)
+    payload_a = dict(ev_a.payload)
+    payload_b = dict(ev_b.payload)
+    payload_a.pop("observed_logical_time", None)
+    payload_b.pop("observed_logical_time", None)
+    payload_a = canonical_json_str(payload_a)
+    payload_b = canonical_json_str(payload_b)
 
     assert (
         payload_a == payload_b

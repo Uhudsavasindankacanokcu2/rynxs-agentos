@@ -60,11 +60,15 @@ def _with_writer_id(event: Event) -> Event:
         seq=event.seq,
     )
 
-kubernetes.config.load_incluster_config()
+# Try in-cluster config first, fallback to kubeconfig for local development
+try:
+    kubernetes.config.load_incluster_config()
+except kubernetes.config.ConfigException:
+    kubernetes.config.load_kube_config()
 
 @kopf.on.startup()
 def _startup(settings: kopf.OperatorSettings, **_):
-    settings.posting.level = "INFO"
+    pass  # Use default logging settings
 
 @kopf.on.create('universe.ai', 'v1alpha1', 'agents')
 @kopf.on.update('universe.ai', 'v1alpha1', 'agents')
@@ -73,11 +77,12 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
         return
     logger.info(f"Reconciling Agent {namespace}/{name} (engine-driven)")
 
-    # Extract labels from metadata
+    # Extract labels and annotations from metadata
     labels = meta.get("labels", {})
+    annotations = meta.get("annotations", {})
 
     # Step 1: Translate K8s object → Event (deterministic)
-    event = adapter.agent_to_event(name, namespace, spec, labels)
+    event = adapter.agent_to_event(name, namespace, spec, labels, annotations)
     logger.debug(f"Translated to event: type={event.type}, aggregate_id={event.aggregate_id}")
 
     # Step 2: Append event to log (hash chain + sequence, CAS retry)
