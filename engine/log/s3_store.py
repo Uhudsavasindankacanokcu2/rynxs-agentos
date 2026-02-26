@@ -77,6 +77,8 @@ class S3EventStore(EventStore):
         self.prefix = prefix.rstrip("/")
         self.endpoint_url = endpoint_url
         self.region = region
+        self.use_head_cache = os.getenv("RYNXS_S3_USE_HEAD", "true").lower() == "true"
+        self.head_key = os.getenv("RYNXS_S3_HEAD_KEY", f"{self.prefix}/_head.json")
 
         # Create S3 client (credentials from environment: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
         try:
@@ -124,35 +126,130 @@ class S3EventStore(EventStore):
             (-1, ZERO_HASH) if no events exist
         """
         try:
-            # List objects in reverse order (most recent first)
-            # NOTE: S3 doesn't support reverse listing, so we list all keys and take the last one
-            # For large event logs, this is inefficient. Future optimization: maintain a "head" object.
-            paginator = self.s3_client.get_paginator("list_objects_v2")
-            page_iterator = paginator.paginate(Bucket=self.bucket, Prefix=self.prefix + "/")
+            # Prefer head cache if enabled
+            if self.use_head_cache:
+                head = self._read_head()
+                if head is not None:
+                    return head
 
-            last_key = None
-            for page in page_iterator:
-                if "Contents" not in page:
-                    continue
-                for obj in page["Contents"]:
-                    key = obj["Key"]
-                    if self._seq_from_key(key) is not None:
-                        last_key = key
-
-            if last_key is None:
-                return -1, ZERO_HASH
-
-            # Get last object to extract hash
-            response = self.s3_client.get_object(Bucket=self.bucket, Key=last_key)
-            body = response["Body"].read().decode("utf-8")
-            rec = json.loads(body)
-            last_seq = rec["event"]["seq"]
-            last_hash = rec["event_hash"]
-            return last_seq, last_hash
+            # Fallback to full list (O(N))
+            return self._scan_last_seq_and_hash()
 
         except (BotoCoreError, ClientError) as e:
             raise EventStoreError(f"Failed to get last seq/hash from S3: {e}") from e
 
+    def _scan_last_seq_and_hash(self) -> Tuple[int, str]:
+        """
+        Scan all event objects to find last seq/hash.
+
+        Returns:
+            (last_seq, last_hash) tuple
+            (-1, ZERO_HASH) if no events exist
+        """
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+        page_iterator = paginator.paginate(Bucket=self.bucket, Prefix=self.prefix + "/")
+
+        last_seq = -1
+        last_key = None
+        for page in page_iterator:
+            if "Contents" not in page:
+                continue
+            for obj in page["Contents"]:
+                key = obj["Key"]
+                seq = self._seq_from_key(key)
+                if seq is None:
+                    continue
+                if seq > last_seq:
+                    last_seq = seq
+                    last_key = key
+
+        if last_key is None:
+            return -1, ZERO_HASH
+
+        response = self.s3_client.get_object(Bucket=self.bucket, Key=last_key)
+        body = response["Body"].read().decode("utf-8")
+        rec = json.loads(body)
+        return rec["event"]["seq"], rec["event_hash"]
+
+    def _read_head(self) -> Optional[Tuple[int, str]]:
+        """
+        Read head cache object if present.
+
+        Returns:
+            (last_seq, last_hash) or None if not found/invalid.
+        """
+        try:
+            response = self.s3_client.get_object(Bucket=self.bucket, Key=self.head_key)
+            body = response["Body"].read().decode("utf-8")
+            data = json.loads(body)
+            last_seq = int(data.get("last_seq", -1))
+            last_hash = data.get("last_hash", ZERO_HASH)
+            return last_seq, last_hash
+        except (BotoCoreError, ClientError, ValueError, TypeError, json.JSONDecodeError):
+            return None
+
+    def _write_head(self, last_seq: int, last_hash: str) -> None:
+        """
+        Best-effort head update. Uses If-Match to avoid overwriting newer head.
+        """
+        if not self.use_head_cache:
+            return
+        try:
+            # Read current head to compare
+            response = self.s3_client.get_object(Bucket=self.bucket, Key=self.head_key)
+            etag = response.get("ETag")
+            body = response["Body"].read().decode("utf-8")
+            data = json.loads(body)
+            current_seq = int(data.get("last_seq", -1))
+            if current_seq >= last_seq:
+                return
+
+            payload = canonical_json_str({"last_seq": last_seq, "last_hash": last_hash})
+            if etag:
+                self.s3_client.put_object(
+                    Bucket=self.bucket,
+                    Key=self.head_key,
+                    Body=payload.encode("utf-8"),
+                    ContentType="application/json",
+                    IfMatch=etag.strip('"'),
+                )
+            else:
+                self.s3_client.put_object(
+                    Bucket=self.bucket,
+                    Key=self.head_key,
+                    Body=payload.encode("utf-8"),
+                    ContentType="application/json",
+                )
+        except ClientError as e:
+            # Ignore precondition failures or read errors (best-effort cache)
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ("PreconditionFailed", "412", "NoSuchKey"):
+                return
+            raise
+        except (BotoCoreError, json.JSONDecodeError, ValueError, TypeError):
+            return
+
+    def _put_event_object(self, key: str, body: str) -> bool:
+        """
+        Put object only if it does not already exist.
+
+        Returns:
+            True if committed, False if conflict (object exists)
+        """
+        try:
+            self.s3_client.put_object(
+                Bucket=self.bucket,
+                Key=key,
+                Body=body.encode("utf-8"),
+                ContentType="application/json",
+                IfNoneMatch="*",
+            )
+            return True
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ("PreconditionFailed", "412"):
+                return False
+            raise
     def append(self, event: Event, expected_prev_hash: Optional[str] = None) -> AppendResult:
         """
         Append event to S3 with hash chain.
@@ -168,7 +265,7 @@ class S3EventStore(EventStore):
             EventStoreError: If append fails
         """
         try:
-            # Get last seq and hash (atomic read in S3 strong consistency model)
+            # Get last seq and hash (head cache or scan)
             last_seq, last_hash = self._get_last_seq_and_hash()
 
             # Check for conflict
@@ -218,14 +315,24 @@ class S3EventStore(EventStore):
             rec = chain_record(last_hash, e2)
             body = canonical_json_str(rec)
 
-            # Write to S3
+            # Write to S3 (append-only, no overwrite)
             key = self._key_for_seq(seq)
-            self.s3_client.put_object(
-                Bucket=self.bucket,
-                Key=key,
-                Body=body.encode("utf-8"),
-                ContentType="application/json",
-            )
+            committed = self._put_event_object(key, body)
+            if not committed:
+                # Object already exists, treat as conflict; refresh observed prev hash
+                observed_last_seq, observed_last_hash = self._scan_last_seq_and_hash()
+                return AppendResult(
+                    event=event,
+                    seq=None,
+                    event_hash=None,
+                    prev_hash=None,
+                    committed=False,
+                    conflict=True,
+                    observed_prev_hash=observed_last_hash,
+                )
+
+            # Best-effort head update
+            self._write_head(seq, rec.get("event_hash"))
 
             return AppendResult(
                 event=e2,

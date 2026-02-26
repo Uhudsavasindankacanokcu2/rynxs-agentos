@@ -67,6 +67,8 @@ Each event object contains a hash-chain record (same format as FileEventStore):
 | `S3_REGION` | AWS region | `us-east-1` | No |
 | `AWS_ACCESS_KEY_ID` | S3 credentials | (from env) | Yes |
 | `AWS_SECRET_ACCESS_KEY` | S3 credentials | (from env) | Yes |
+| `RYNXS_S3_USE_HEAD` | Enable head cache | `true` | No |
+| `RYNXS_S3_HEAD_KEY` | Head object key | `<prefix>/_head.json` | No |
 
 ### Helm Values (operator chart)
 
@@ -116,13 +118,14 @@ This ensures all events are read, even for logs with millions of events.
 
 ### Read Performance
 
-- **List overhead**: `_get_last_seq_and_hash()` lists all keys to find the last event. For large logs (>10K events), this can be slow.
-- **Future optimization**: Maintain a "head" object (`events/.head.json`) to cache last seq/hash (similar to FileEventStore's `.head.json`).
+- **Head cache**: `_head.json` stores the latest seq/hash to avoid full list scans.
+- **Fallback scan**: If head is missing/invalid, the store falls back to listing all keys.
 
 ### Append Performance
 
 - **Single PutObject**: Each append is one S3 API call (~10-50ms latency).
-- **No locking**: Multiple writers can append concurrently (conflict detection via `expected_prev_hash`).
+- **Append-only safety**: Conditional put (`If-None-Match: *`) prevents overwrites on seq collisions.
+- **Conflict detection**: `expected_prev_hash` + conditional put ensures safe CAS semantics.
 
 ### Cost
 
@@ -217,13 +220,12 @@ pytest engine/tests/test_s3_store.py -v
 
 ### Current Limitations
 
-1. **No head caching**: `_get_last_seq_and_hash()` lists all keys (slow for large logs)
-2. **No checkpointing**: Replay always starts from seq=0 (future: S3-based checkpoint storage)
-3. **No aggregate_id indexing**: Filtering by aggregate_id requires reading all events
+1. **No checkpointing**: Replay always starts from seq=0 (future: S3-based checkpoint storage)
+2. **No aggregate_id indexing**: Filtering by aggregate_id requires reading all events
 
 ### Future Enhancements (E2.2+)
 
-1. **Head object caching**: Store `events/.head.json` with last seq/hash (atomic PutObject with conditional write)
+1. **Head object hardening**: Conditional head updates with monotonic guarantees under high contention
 2. **S3 Select**: Use S3 Select queries to filter events by aggregate_id (requires Parquet format)
 3. **MinIO e2e tests**: Deploy MinIO in CI and run integration tests
 4. **Lifecycle policies**: Auto-archive old events to Glacier (cost optimization)
