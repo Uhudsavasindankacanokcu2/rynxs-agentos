@@ -1,0 +1,19 @@
+{{- if .Values.minio.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rynxs.fullname" . }}-minio
+  labels:
+    {{- include "rynxs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  type: {{ .Values.minio.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.minio.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "rynxs.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+{{- end -}}

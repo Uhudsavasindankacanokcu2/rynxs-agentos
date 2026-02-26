@@ -52,6 +52,40 @@ logSink:
     region: us-east-1
     accessKeySecret: ""  # Name of k8s secret with AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY
 
+# MinIO (E2.4) - Optional S3-compatible object storage
+# Deploy MinIO alongside operator for S3 event log storage
+minio:
+  enabled: false
+  image:
+    repository: minio/minio
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # MinIO credentials (WARNING: Change in production!)
+  rootUser: minioadmin
+  rootPassword: minioadmin
+
+  # Storage
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ""  # Use cluster default
+    accessMode: ReadWriteOnce
+
+  # Resources
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+  # Service
+  service:
+    type: ClusterIP
+    port: 9000
+
 # Observability (E4)
 metrics:
   enabled: false

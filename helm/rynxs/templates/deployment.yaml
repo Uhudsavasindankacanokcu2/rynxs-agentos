@@ -55,11 +55,19 @@ spec:
 
             {{- if eq .Values.logSink.type "s3" }}
             - name: S3_ENDPOINT
+              {{- if and .Values.minio.enabled (not .Values.logSink.s3.endpoint) }}
+              value: "http://{{ include "rynxs.fullname" . }}-minio:{{ .Values.minio.service.port }}"
+              {{- else }}
               value: {{ .Values.logSink.s3.endpoint | quote }}
+              {{- end }}
             - name: S3_BUCKET
-              value: {{ .Values.logSink.s3.bucket | quote }}
+              value: {{ .Values.logSink.s3.bucket | default "rynxs-events" | quote }}
+            - name: S3_PREFIX
+              value: "events"
             - name: S3_REGION
               value: {{ .Values.logSink.s3.region | quote }}
+            - name: RYNXS_S3_SKIP_BUCKET_CHECK
+              value: "false"
             # Credentials come from secret (name in values)
             {{- if .Values.logSink.s3.accessKeySecret }}
             - name: AWS_ACCESS_KEY_ID

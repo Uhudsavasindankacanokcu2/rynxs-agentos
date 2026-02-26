@@ -83,26 +83,93 @@ helm install rynxs ./helm/rynxs --values ha-values.yaml
 
 #### S3 Remote Storage
 
+**Option 1: Deploy with Built-in MinIO (Recommended for testing/dev)**
+
 ```yaml
-# s3-values.yaml
+# s3-minio-values.yaml
+minio:
+  enabled: true
+  rootUser: minioadmin
+  rootPassword: minioadmin  # Change in production!
+  persistence:
+    enabled: true
+    size: 5Gi
+
 logSink:
   type: s3
   s3:
-    enabled: true
-    endpoint: "minio-service.rynxs.svc.cluster.local:9000"
     bucket: "rynxs-events"
     region: "us-east-1"
     accessKeySecret: "rynxs-s3-credentials"
+    # endpoint auto-configured to MinIO service when minio.enabled=true
 ```
 
 ```bash
 # Create S3 credentials secret
 kubectl create secret generic rynxs-s3-credentials \
   --from-literal=AWS_ACCESS_KEY_ID=minioadmin \
-  --from-literal=AWS_SECRET_ACCESS_KEY=minioadmin
+  --from-literal=AWS_SECRET_ACCESS_KEY=minioadmin \
+  --namespace rynxs
 
-# Install with S3 storage
-helm install rynxs ./helm/rynxs --values s3-values.yaml
+# Install with MinIO + S3 storage
+helm install rynxs ./helm/rynxs --values s3-minio-values.yaml --namespace rynxs --create-namespace
+
+# Wait for MinIO and operator pods
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=rynxs -n rynxs --timeout=120s
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=minio -n rynxs --timeout=120s
+
+# Create bucket (exec into MinIO pod)
+MINIO_POD=$(kubectl get pod -n rynxs -l app.kubernetes.io/component=minio -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n rynxs $MINIO_POD -- sh -c "
+    wget -q https://dl.min.io/client/mc/release/linux-amd64/mc -O /tmp/mc && chmod +x /tmp/mc
+    /tmp/mc alias set local http://localhost:9000 minioadmin minioadmin
+    /tmp/mc mb local/rynxs-events --ignore-existing
+"
+
+# Verify S3 event storage
+kubectl apply -f examples/agent-basic.yaml -n rynxs
+sleep 10
+kubectl exec -n rynxs $MINIO_POD -- /tmp/mc ls local/rynxs-events/events/
+```
+
+**Option 2: External S3 / MinIO (Production)**
+
+```yaml
+# s3-external-values.yaml
+logSink:
+  type: s3
+  s3:
+    endpoint: "https://s3.us-east-1.amazonaws.com"  # Or MinIO URL
+    bucket: "rynxs-events-prod"
+    region: "us-east-1"
+    accessKeySecret: "rynxs-s3-credentials"
+```
+
+```bash
+# Create S3 credentials secret (use IAM user credentials)
+kubectl create secret generic rynxs-s3-credentials \
+  --from-literal=AWS_ACCESS_KEY_ID=AKIA... \
+  --from-literal=AWS_SECRET_ACCESS_KEY=secret... \
+  --namespace rynxs
+
+# Ensure bucket exists
+aws s3 mb s3://rynxs-events-prod --region us-east-1
+
+# Install with external S3 storage
+helm install rynxs ./helm/rynxs --values s3-external-values.yaml --namespace rynxs
+```
+
+**Verify S3 Storage**:
+
+```bash
+# Check operator logs for S3 connection
+kubectl logs -n rynxs -l app.kubernetes.io/name=rynxs --tail=50 | grep -i s3
+
+# List event objects (MinIO)
+kubectl exec -n rynxs $MINIO_POD -- /tmp/mc ls local/rynxs-events/events/
+
+# List event objects (AWS S3)
+aws s3 ls s3://rynxs-events-prod/events/
 ```
 
 #### Observability (Metrics + Structured Logging)
