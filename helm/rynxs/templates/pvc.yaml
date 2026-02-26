@@ -1,0 +1,24 @@
+{{- if .Values.persistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "rynxs.fullname" . }}-logs
+  labels:
+    {{- include "rynxs.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size | quote }}
+
+  {{- /*
+      storageClassName behavior:
+      - If user sets persistence.storageClass: "fast-ssd" => set it.
+      - If user sets persistence.storageClass: ""        => omit and let cluster default apply.
+      Many clusters default a StorageClass automatically if omitted. See StorageClass docs.
+  */ -}}
+  {{- if and (hasKey .Values.persistence "storageClass") (ne .Values.persistence.storageClass "") }}
+  storageClassName: {{ .Values.persistence.storageClass | quote }}
+  {{- end }}
+{{- end -}}
