@@ -1,0 +1,32 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "rynxs.fullname" . }}-operator
+  labels:
+    {{- include "rynxs.labels" . | nindent 4 }}
+rules:
+  # ---- Custom Resources (your API group) ----
+  # NOTE: apiGroup/resource names must match your CRDs exactly.
+  - apiGroups: ["universe.ai"]
+    resources: ["agents", "sessions"]
+    verbs: ["get", "list", "watch", "patch"]
+
+  # Optional but common: if your controller patches /status
+  - apiGroups: ["universe.ai"]
+    resources: ["agents/status", "sessions/status"]
+    verbs: ["patch"]
+
+  # ---- Built-in resources the operator creates/patches ----
+  - apiGroups: [""]
+    resources: ["configmaps", "persistentvolumeclaims"]
+    verbs: ["create", "get", "list", "patch"]
+
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create", "get", "list", "patch"]
+
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["create", "get", "list", "patch"]
+{{- end -}}
