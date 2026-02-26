@@ -1,0 +1,155 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rynxs.fullname" . }}-operator
+  labels:
+    {{- include "rynxs.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "rynxs.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "rynxs.selectorLabels" . | nindent 8 }}
+        {{- include "rynxs.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "rynxs.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+
+      containers:
+        - name: operator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          # Run kopf with built-in liveness endpoint
+          # Kopf: --liveness=http://0.0.0.0:8080/healthz (docs)
+          args:
+            - run
+            - -m
+            - universe_operator.main
+            {{- if .Values.probes.liveness.enabled }}
+            - --liveness=http://0.0.0.0:{{ .Values.probes.liveness.port }}{{ .Values.probes.liveness.path }}
+            {{- end }}
+            {{- range .Values.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+
+          env:
+            # Logging
+            - name: RYNXS_LOG_LEVEL
+              value: {{ .Values.logging.level | quote }}
+            - name: RYNXS_LOG_FORMAT
+              value: {{ .Values.logging.format | quote }}
+
+            # Event store selection (E2 prep)
+            - name: EVENT_STORE_TYPE
+              value: {{ .Values.logSink.type | quote }}
+
+            {{- if eq .Values.logSink.type "file" }}
+            - name: EVENT_STORE_PATH
+              value: "/var/lib/rynxs/logs/operator-events.log"
+            {{- end }}
+
+            {{- if eq .Values.logSink.type "s3" }}
+            - name: S3_ENDPOINT
+              value: {{ .Values.logSink.s3.endpoint | quote }}
+            - name: S3_BUCKET
+              value: {{ .Values.logSink.s3.bucket | quote }}
+            - name: S3_REGION
+              value: {{ .Values.logSink.s3.region | quote }}
+            # Credentials come from secret (name in values)
+            {{- if .Values.logSink.s3.accessKeySecret }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.logSink.s3.accessKeySecret | quote }}
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.logSink.s3.accessKeySecret | quote }}
+                  key: AWS_SECRET_ACCESS_KEY
+            {{- end }}
+            {{- end }}
+
+            # Leader election (E3 prep)
+            - name: LEADER_ELECTION_ENABLED
+              value: {{ ternary "true" "false" .Values.leaderElection.enabled | quote }}
+            - name: LEADER_ELECTION_LEASE_DURATION
+              value: {{ .Values.leaderElection.leaseDuration | quote }}
+            - name: LEADER_ELECTION_RENEW_DEADLINE
+              value: {{ .Values.leaderElection.renewDeadline | quote }}
+            - name: LEADER_ELECTION_RETRY_PERIOD
+              value: {{ .Values.leaderElection.retryPeriod | quote }}
+
+            # Metrics (E4 prep)
+            - name: METRICS_ENABLED
+              value: {{ ternary "true" "false" .Values.metrics.enabled | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.metrics.port | quote }}
+            - name: METRICS_PATH
+              value: {{ .Values.metrics.path | quote }}
+
+            {{- range .Values.extraEnv }}
+            - {{ toYaml . | nindent 14 }}
+            {{- end }}
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          ports:
+            - name: http-probes
+              containerPort: {{ .Values.probes.liveness.port }}
+              protocol: TCP
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
+
+          livenessProbe:
+            {{- if .Values.probes.liveness.enabled }}
+            httpGet:
+              path: {{ .Values.probes.liveness.path | quote }}
+              port: {{ .Values.probes.liveness.port }}
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+            {{- end }}
+
+          readinessProbe:
+            {{- if .Values.probes.readiness.enabled }}
+            httpGet:
+              path: {{ .Values.probes.readiness.path | quote }}
+              port: {{ .Values.probes.readiness.port }}
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+            {{- end }}
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: {{ .Values.securityContext.readOnlyRootFilesystem }}
+            runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: rynxs-logs
+              mountPath: /var/lib/rynxs/logs
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: rynxs-logs
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "rynxs.fullname" . }}-logs
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

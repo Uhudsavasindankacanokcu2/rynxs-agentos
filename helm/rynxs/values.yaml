@@ -67,6 +67,29 @@ securityContext:
   fsGroup: 1000
   readOnlyRootFilesystem: true
 
+# Probes (E1.2)
+probes:
+  liveness:
+    enabled: true
+    path: /healthz
+    port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 6
+  readiness:
+    enabled: false
+    path: /ready
+    port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+# Extra env / args (optional but handy)
+extraEnv: []
+extraArgs: []
+
 # Name overrides (optional)
 nameOverride: ""
 fullnameOverride: ""
