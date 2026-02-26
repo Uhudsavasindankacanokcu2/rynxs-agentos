@@ -1,9 +1,0 @@
-{{- if .Values.gvisor.enabled }}
-apiVersion: node.k8s.io/v1
-kind: RuntimeClass
-metadata:
-  name: gvisor
-  labels:
-    {{- include "rynxs.labels" . | nindent 4 }}
-handler: {{ .Values.gvisor.runtimeHandler }}
-{{- end }}

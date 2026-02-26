@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rynxs.fullname" . }}-chartinfo
+  labels:
+    {{- include "rynxs.labels" . | nindent 4 }}
+data:
+  chart: {{ .Chart.Name }}
+  version: {{ .Chart.Version }}
+  appVersion: {{ .Chart.AppVersion }}

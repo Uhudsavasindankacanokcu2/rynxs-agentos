@@ -2,43 +2,30 @@
 Expand the name of the chart.
 */}}
 {{- define "rynxs.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
-{{- end }}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
 
 {{/*
 Create a default fully qualified app name.
 */}}
 {{- define "rynxs.fullname" -}}
-{{- if .Values.fullnameOverride }}
-{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- $name := default .Chart.Name .Values.nameOverride }}
-{{- if contains $name .Release.Name }}
-{{- .Release.Name | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/*
-Create chart name and version as used by the chart label.
-*/}}
-{{- define "rynxs.chart" -}}
-{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
-{{- end }}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name (include "rynxs.name" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
 
 {{/*
 Common labels
 */}}
 {{- define "rynxs.labels" -}}
-helm.sh/chart: {{ include "rynxs.chart" . }}
-{{ include "rynxs.selectorLabels" . }}
-{{- if .Chart.AppVersion }}
+app.kubernetes.io/name: {{ include "rynxs.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-{{- end }}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
+{{- end -}}
 
 {{/*
 Selector labels
@@ -46,20 +33,15 @@ Selector labels
 {{- define "rynxs.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "rynxs.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
+{{- end -}}
 
 {{/*
-Operator labels
+Create the name of the service account to use
 */}}
-{{- define "rynxs.operator.labels" -}}
-{{ include "rynxs.labels" . }}
-app.kubernetes.io/component: operator
-{{- end }}
-
-{{/*
-MinIO labels
-*/}}
-{{- define "rynxs.minio.labels" -}}
-{{ include "rynxs.labels" . }}
-app.kubernetes.io/component: minio
-{{- end }}
+{{- define "rynxs.serviceAccountName" -}}
+{{- if .Values.rbac.create -}}
+{{- default (include "rynxs.fullname" .) .Values.rbac.serviceAccountName -}}
+{{- else -}}
+{{- default "default" .Values.rbac.serviceAccountName -}}
+{{- end -}}
+{{- end -}}

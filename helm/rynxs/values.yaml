@@ -1,152 +1,72 @@
-nameOverride: ""
-fullnameOverride: ""
+# Image configuration
+image:
+  repository: ghcr.io/rynxs/operator
+  tag: v0.1.0
+  pullPolicy: IfNotPresent
 
-namespace:
+# Replica count (for HA with leader election)
+replicaCount: 1
+
+# Resources
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# RBAC
+rbac:
   create: true
-  name: universe
+  serviceAccountName: rynxs-operator
 
-operator:
-  kind: "deployment" # deployment | statefulset
-  replicaCount: 1
-  image:
-    repository: ghcr.io/uhudsavasindankacanokcu2/rynxs-operator
-    tag: latest
-    pullPolicy: IfNotPresent
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
-  serviceAccount:
-    create: true
-    name: rynxs-operator
-  rbac:
-    create: true
-  hashVersion: ""
-  writerId: ""
-  leaderElection:
-    enabled: false
-    leaseName: rynxs-operator-leader
-    leaseDurationSeconds: 30
-    renewDeadlineSeconds: 20
-    retryPeriodSeconds: 5
-  eventStore:
-    path: /var/log/rynxs/operator-events.log
-    mountPath: /var/log/rynxs
-    persistence:
-      enabled: false
-      size: 10Gi
-      storageClass: ""
-      accessModes:
-        - ReadWriteOnce
-    rotation:
-      enabled: false
-      maxBytes: 0
-      maxSegments: 0
-    sink:
-      minio:
-        enabled: false
-        endpoint: http://minio:9000
-        bucket: rynxs-logs
-        accessKey: minioadmin
-        secretKey: minioadmin
-        prefix: ""
-        insecure: true
-        schedule: "*/5 * * * *"
-        statefulset:
-          enabled: false
-
-minio:
-  enabled: true
-  replicaCount: 1
-  image:
-    repository: minio/minio
-    tag: latest
-    pullPolicy: IfNotPresent
-  resources:
-    requests:
-      cpu: 250m
-      memory: 512Mi
-    limits:
-      cpu: 1000m
-      memory: 2Gi
-  persistence:
-    enabled: true
-    size: 5Gi
-    storageClass: ""
-  credentials:
-    rootUser: minioadmin
-    rootPassword: minioadmin
-
-networkPolicy:
-  enabled: true
-  agentDenyEgress: true
-  agentAllowEgress: true
-  sandboxDenyEgress: true
-
-gvisor:
-  enabled: false
-  runtimeHandler: runsc
-
+# CRDs
 crds:
-  install: true
-  keep: true
+  create: true
 
-dashboard:
+# Persistence (operator event log)
+persistence:
   enabled: true
-  replicaCount: 2
-  image:
-    repository: ghcr.io/uhudsavasindankacanokcu2/rynxs-dashboard
-    tag: latest
-    pullPolicy: IfNotPresent
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 200m
-      memory: 128Mi
-  service:
-    type: ClusterIP
-    port: 80
-  ingress:
-    enabled: false
-    className: nginx
-    annotations: {}
-    hosts:
-      - host: rynxs.example.com
-        paths:
-          - path: /
-            pathType: Prefix
-    tls: []
+  size: 10Gi
+  storageClass: ""  # Use cluster default
+  accessMode: ReadWriteOnce
 
-monitoring:
+# Leader Election (E3)
+leaderElection:
   enabled: false
-  serviceMonitor:
-    enabled: false
-    interval: 30s
-    labels: {}
+  leaseDuration: 15s
+  renewDeadline: 10s
+  retryPeriod: 2s
 
+# Log Sink (E2)
+logSink:
+  type: file  # Options: file, s3
+  s3:
+    enabled: false
+    endpoint: ""
+    bucket: ""
+    region: us-east-1
+    accessKeySecret: ""  # Name of k8s secret with AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY
+
+# Observability (E4)
+metrics:
+  enabled: false
+  port: 8080
+  path: /metrics
+
+# Logging
+logging:
+  level: INFO
+  format: json
+
+# Security
 securityContext:
   runAsNonRoot: true
   runAsUser: 1000
   fsGroup: 1000
-  seccompProfile:
-    type: RuntimeDefault
+  readOnlyRootFilesystem: true
 
-podSecurityPolicy:
-  enabled: false
-
-autoscaling:
-  operator:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 3
-    targetCPUUtilizationPercentage: 80
-  dashboard:
-    enabled: false
-    minReplicas: 2
-    maxReplicas: 5
-    targetCPUUtilizationPercentage: 80
+# Name overrides (optional)
+nameOverride: ""
+fullnameOverride: ""
