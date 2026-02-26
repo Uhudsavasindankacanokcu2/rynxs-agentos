@@ -25,6 +25,8 @@ classifiers = [
 dependencies = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -37,14 +39,15 @@ checkpoint = [
     "cryptography>=41.0.0",
 ]
 cli = [
-    "click>=8.0.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
 ]
 
 [project.scripts]
-engine = "engine.cli.main:cli"
+rynxs = "cli.main:main"
 
 [tool.setuptools]
-packages = ["engine", "engine.core", "engine.log", "engine.checkpoint", "engine.replay", "engine.cli", "engine.tests", "engine.verify"]
+packages = ["engine", "engine.core", "engine.log", "engine.checkpoint", "engine.replay", "engine.tests", "cli", "cli.commands"]
 
 [tool.pytest.ini_options]
 testpaths = ["engine/tests"]
