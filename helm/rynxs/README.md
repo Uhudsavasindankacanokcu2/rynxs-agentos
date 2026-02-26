@@ -20,7 +20,7 @@ Rynxs provides a deterministic, replayable, and auditable execution engine for A
 ### Quick Start
 
 ```bash
-# Install with default configuration
+# Install with default configuration (includes CRDs)
 helm install rynxs ./helm/rynxs
 
 # Install with custom values
@@ -28,6 +28,9 @@ helm install rynxs ./helm/rynxs --values custom-values.yaml
 
 # Install in specific namespace
 helm install rynxs ./helm/rynxs --namespace rynxs --create-namespace
+
+# Skip CRD installation (if CRDs are managed externally)
+helm install rynxs ./helm/rynxs --skip-crds
 ```
 
 ### Verify Installation
@@ -104,6 +107,8 @@ helm install rynxs ./helm/rynxs --values s3-values.yaml
 
 ## Upgrade
 
+### Upgrading the Chart
+
 ```bash
 # Upgrade to new version
 helm upgrade rynxs ./helm/rynxs
@@ -112,21 +117,59 @@ helm upgrade rynxs ./helm/rynxs
 helm upgrade rynxs ./helm/rynxs --values custom-values.yaml
 ```
 
-**Note**: CRD upgrades are not managed by Helm. To upgrade CRDs, manually apply them:
+### Upgrading CRDs
 
+**Important**: Helm does not upgrade CRDs automatically. CRDs must be upgraded manually before upgrading the chart.
+
+**Why?** Helm's `crds/` directory is special: CRDs are installed on `helm install` but are **not updated** on `helm upgrade`. This is intentional to prevent accidental breaking changes to existing custom resources.
+
+**Upgrade Procedure**:
+
+1. **First**, manually apply CRD updates:
+   ```bash
+   kubectl apply -f helm/rynxs/crds/
+   ```
+
+2. **Then**, upgrade the chart:
+   ```bash
+   helm upgrade rynxs ./helm/rynxs
+   ```
+
+**Verification**:
 ```bash
-kubectl apply -f crds/
+# Check CRD versions
+kubectl get crd agents.universe.ai sessions.universe.ai -o yaml | grep "version:"
+
+# Verify operator can reconcile resources
+kubectl apply -f examples/agent-basic.yaml
+kubectl get agents -n rynxs
 ```
+
+**References**:
+- [Helm CRD Best Practices](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/)
+- [Kubernetes CRD Versioning](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definition-versioning/)
 
 ## Uninstall
 
 ```bash
-# Uninstall release
+# Uninstall release (removes operator, RBAC, PVC, etc.)
 helm uninstall rynxs
-
-# Clean up CRDs (if desired)
-kubectl delete crd agents.universe.ai sessions.universe.ai universes.universe.ai
 ```
+
+**Important**: `helm uninstall` does **not** delete CRDs. This is intentional to prevent accidental data loss (custom resources would be cascade-deleted if CRDs are removed).
+
+**To completely remove CRDs** (⚠️ this deletes all custom resources):
+
+```bash
+# WARNING: This will delete all Agents and Sessions in the cluster
+kubectl delete crd agents.universe.ai sessions.universe.ai
+
+# Verify deletion
+kubectl get crd | grep universe.ai
+```
+
+**References**:
+- [Helm CRD Deletion Behavior](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/#some-caveats-and-explanations)
 
 ## Requirements
 
@@ -154,6 +197,20 @@ helm template rynxs helm/rynxs > rendered.yaml
 helm install rynxs ./helm/rynxs --dry-run --debug
 ```
 
+**Note**: `--dry-run` has limitations with CRDs. The API server may not recognize custom resources during dry-run since CRDs are not actually created. For complete validation:
+
+```bash
+# 1. Render templates to file
+helm template rynxs helm/rynxs > rendered.yaml
+
+# 2. Validate with kubectl (client-side only)
+kubectl apply --dry-run=client -f rendered.yaml
+
+# 3. For server-side validation, install CRDs first
+kubectl apply -f helm/rynxs/crds/
+kubectl apply --dry-run=server -f rendered.yaml
+```
+
 ## Architecture
 
 Rynxs operator implements event-sourcing with deterministic state transitions:
@@ -174,7 +231,7 @@ Event Log (Append-Only)
 
 - [Architecture Overview](../../docs/ARCHITECTURE.md)
 - [Determinism Proof](../../DETERMINISM_PROOF.md)
-- [RBAC Permissions](../../docs/RBAC.md) (coming in E1.3)
+- [RBAC Permissions](../../docs/RBAC.md)
 - [MinIO Setup](../../docs/MINIO.md) (coming in E2)
 
 ## Support
