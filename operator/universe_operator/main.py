@@ -27,9 +27,26 @@ from engine.core import Event
 from engine.core.canonical import canonical_json_str
 import hashlib
 
-# Initialize engine components (global for operator)
-event_store_path = os.getenv("EVENT_STORE_PATH", "/var/log/rynxs/operator-events.log")
-event_store = FileEventStore(event_store_path)
+# Initialize event store (file or S3 based on EVENT_STORE_TYPE)
+event_store_type = os.getenv("EVENT_STORE_TYPE", "file").lower()
+
+if event_store_type == "s3":
+    # S3 event store configuration (E2.1)
+    from engine.log import S3EventStore
+    s3_bucket = os.getenv("S3_BUCKET", "rynxs-events")
+    s3_prefix = os.getenv("S3_PREFIX", "events")
+    s3_endpoint = os.getenv("S3_ENDPOINT")  # For MinIO
+    s3_region = os.getenv("S3_REGION", "us-east-1")
+    event_store = S3EventStore(
+        bucket=s3_bucket,
+        prefix=s3_prefix,
+        endpoint_url=s3_endpoint,
+        region=s3_region,
+    )
+else:
+    # File event store (default)
+    event_store_path = os.getenv("EVENT_STORE_PATH", "/var/log/rynxs/operator-events.log")
+    event_store = FileEventStore(event_store_path)
 clock = DeterministicClock(current=0)
 adapter = EngineAdapter(clock)
 decision_layer = DecisionLayer()
