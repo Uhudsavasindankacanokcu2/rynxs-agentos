@@ -8,6 +8,10 @@ from .team_controller import TeamController
 from .message_controller import MessageController
 from .metric_controller import MetricController
 
+# Observability (E4)
+from .logging_config import setup_logging, add_trace_id_filter, get_logger
+from .metrics import start_metrics_server, track_event, track_reconcile_duration
+
 # Engine integration imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
 from engine.log import FileEventStore
@@ -68,90 +72,115 @@ except kubernetes.config.ConfigException:
 
 @kopf.on.startup()
 def _startup(settings: kopf.OperatorSettings, **_):
-    pass  # Use default logging settings
+    # Setup structured logging (E4.2)
+    setup_logging()
+    add_trace_id_filter()
+
+    # Start metrics server (E4.1)
+    metrics_enabled = os.getenv("METRICS_ENABLED", "false").lower() == "true"
+    metrics_port = int(os.getenv("METRICS_PORT", "8080"))
+    start_metrics_server(enabled=metrics_enabled, port=metrics_port)
+
+    logger = get_logger(__name__)
+    logger.info("Operator startup complete", extra={
+        "metrics_enabled": metrics_enabled,
+        "metrics_port": metrics_port,
+        "event_store_path": event_store_path,
+    })
 
 @kopf.on.create('universe.ai', 'v1alpha1', 'agents')
 @kopf.on.update('universe.ai', 'v1alpha1', 'agents')
 def agent_reconcile(spec, name, namespace, logger, meta, **_):
     if not _require_leader(logger):
         return
+
+    # Use structured logger with trace_id (E4.2)
+    aggregate_id = f"agent-{namespace}-{name}"
+    logger = get_logger(__name__, trace_id=aggregate_id)
     logger.info(f"Reconciling Agent {namespace}/{name} (engine-driven)")
 
-    # Extract labels and annotations from metadata
-    labels = meta.get("labels", {})
-    annotations = meta.get("annotations", {})
+    # Track reconcile duration (E4.1)
+    with track_reconcile_duration("agents"):
+        # Extract labels and annotations from metadata
+        labels = meta.get("labels", {})
+        annotations = meta.get("annotations", {})
 
-    # Step 1: Translate K8s object → Event (deterministic)
-    event = adapter.agent_to_event(name, namespace, spec, labels, annotations)
-    logger.debug(f"Translated to event: type={event.type}, aggregate_id={event.aggregate_id}")
+        # Step 1: Translate K8s object → Event (deterministic)
+        event = adapter.agent_to_event(name, namespace, spec, labels, annotations)
+        logger.debug(f"Translated to event: type={event.type}, aggregate_id={event.aggregate_id}")
 
-    # Step 2: Append event to log (hash chain + sequence, CAS retry)
-    try:
-        append_result = event_store.append_with_retry(_with_writer_id(event))
-        event_stored = append_result.event
-        logger.info(f"Logged event seq={event_stored.seq}, hash_chain=OK")
-    except Exception as e:
-        logger.error(f"Failed to append event: {e}")
-        raise
+        # Step 2: Append event to log (hash chain + sequence, CAS retry)
+        try:
+            append_result = event_store.append_with_retry(_with_writer_id(event))
+            event_stored = append_result.event
+            track_event(event_stored.type)  # Track event metric (E4.1)
+            logger.info(f"Logged event seq={event_stored.seq}, hash_chain=OK")
+        except Exception as e:
+            logger.error(f"Failed to append event: {e}")
+            raise
 
-    # Capture trigger event hash for decision ledger
-    trigger_event_hash = append_result.event_hash or event_store.get_event_hash(event_stored.seq)
-    if not trigger_event_hash:
-        raise ValueError(f"Missing event_hash for seq={event_stored.seq}")
+        # Capture trigger event hash for decision ledger
+        trigger_event_hash = append_result.event_hash or event_store.get_event_hash(event_stored.seq)
+        if not trigger_event_hash:
+            raise ValueError(f"Missing event_hash for seq={event_stored.seq}")
 
-    # Step 3: Replay to get current state (deterministic)
-    try:
-        replay_result = replay(event_store, reducer)
-        state = replay_result.state
-        logger.debug(f"Replayed {replay_result.applied} events, state_version={state.version}")
-    except Exception as e:
-        logger.error(f"Replay failed: {e}")
-        raise
+        # Step 3: Replay to get current state (deterministic)
+        try:
+            replay_result = replay(event_store, reducer)
+            state = replay_result.state
+            logger.debug(f"Replayed {replay_result.applied} events, state_version={state.version}")
+        except Exception as e:
+            logger.error(f"Replay failed: {e}")
+            raise
 
-    # Step 4: Decide actions (pure, deterministic)
-    try:
-        actions = decision_layer.decide(state, event_stored)
-        logger.info(f"Decided {len(actions)} actions: {[a.action_type for a in actions]}")
-    except Exception as e:
-        logger.error(f"Decision layer failed: {e}")
-        raise
+        # Step 4: Decide actions (pure, deterministic)
+        try:
+            actions = decision_layer.decide(state, event_stored)
+            logger.info(f"Decided {len(actions)} actions: {[a.action_type for a in actions]}")
+        except Exception as e:
+            logger.error(f"Decision layer failed: {e}")
+            raise
 
-    # Step 4.5: Log decision ledger (ActionsDecided)
-    try:
-        actions_canonical = actions_to_canonical(actions)
-        actions_json = canonical_json_str(actions_canonical)
-        actions_hash = hashlib.sha256(actions_json.encode("utf-8")).hexdigest()
-        decision_event = _with_writer_id(Event(
-            type="ActionsDecided",
-            aggregate_id=event_stored.aggregate_id,
-            ts=clock.now(),
-            payload={
-                "agent_id": event_stored.aggregate_id,
-                "trigger_event_seq": event_stored.seq,
-                "trigger_event_hash": trigger_event_hash,
-                "trigger_event_type": event_stored.type,
-                "trigger_spec_hash": event_stored.payload.get("spec_hash"),
-                "actions": actions_canonical,
-                "actions_hash": actions_hash,
-                "action_ids": [action_id(a) for a in actions],
-            },
-            meta={"source": "decision_layer"},
-        ))
-        event_store.append_with_retry(decision_event)
-    except Exception as e:
-        logger.error(f"Failed to log ActionsDecided: {e}")
-        raise
+        # Step 4.5: Log decision ledger (ActionsDecided)
+        try:
+            actions_canonical = actions_to_canonical(actions)
+            actions_json = canonical_json_str(actions_canonical)
+            actions_hash = hashlib.sha256(actions_json.encode("utf-8")).hexdigest()
+            decision_event = _with_writer_id(Event(
+                type="ActionsDecided",
+                aggregate_id=event_stored.aggregate_id,
+                ts=clock.now(),
+                payload={
+                    "agent_id": event_stored.aggregate_id,
+                    "trigger_event_seq": event_stored.seq,
+                    "trigger_event_hash": trigger_event_hash,
+                    "trigger_event_type": event_stored.type,
+                    "trigger_spec_hash": event_stored.payload.get("spec_hash"),
+                    "actions": actions_canonical,
+                    "actions_hash": actions_hash,
+                    "action_ids": [action_id(a) for a in actions],
+                },
+                meta={"source": "decision_layer"},
+            ))
+            event_store.append_with_retry(decision_event)
+            track_event(decision_event.type)  # Track event metric (E4.1)
+        except Exception as e:
+            logger.error(f"Failed to log ActionsDecided: {e}")
+            raise
 
-    # Step 5: Execute actions (side effects)
-    try:
-        executor = ExecutorLayer(event_store, clock, logger)
-        feedback_events = executor.apply(actions)
-        logger.info(f"Executed actions, logged {len(feedback_events)} feedback events")
-    except Exception as e:
-        logger.error(f"Executor failed: {e}")
-        raise
+        # Step 5: Execute actions (side effects)
+        try:
+            executor = ExecutorLayer(event_store, clock, logger)
+            feedback_events = executor.apply(actions)
+            # Track feedback events
+            for feedback_event in feedback_events:
+                track_event(feedback_event.type)
+            logger.info(f"Executed actions, logged {len(feedback_events)} feedback events")
+        except Exception as e:
+            logger.error(f"Executor failed: {e}")
+            raise
 
-    logger.info(f"Agent {namespace}/{name} reconciliation complete (engine loop)")
+        logger.info(f"Agent {namespace}/{name} reconciliation complete (engine loop)")
 
 # Legacy fallback (for testing without engine loop)
 def agent_reconcile_legacy(spec, name, namespace, logger, **_):

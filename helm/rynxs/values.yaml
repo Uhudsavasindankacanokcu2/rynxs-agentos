@@ -54,6 +54,10 @@ metrics:
   enabled: false
   port: 8080
   path: /metrics
+  annotations: {}
+    # prometheus.io/scrape: "true"
+    # prometheus.io/port: "8080"
+    # prometheus.io/path: "/metrics"
 
 # Logging
 logging:

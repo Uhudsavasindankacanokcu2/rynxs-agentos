@@ -1,0 +1,22 @@
+{{- if .Values.metrics.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rynxs.fullname" . }}-metrics
+  labels:
+    {{- include "rynxs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+  {{- if .Values.metrics.annotations }}
+  annotations:
+    {{- toYaml .Values.metrics.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "rynxs.selectorLabels" . | nindent 4 }}
+{{- end -}}

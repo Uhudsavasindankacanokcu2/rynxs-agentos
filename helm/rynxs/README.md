@@ -105,6 +105,43 @@ kubectl create secret generic rynxs-s3-credentials \
 helm install rynxs ./helm/rynxs --values s3-values.yaml
 ```
 
+#### Observability (Metrics + Structured Logging)
+
+```yaml
+# observability-values.yaml
+metrics:
+  enabled: true
+  port: 8080
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+
+logging:
+  level: INFO
+  format: json  # Structured JSON logs with trace_id
+```
+
+```bash
+# Install with observability enabled
+helm install rynxs ./helm/rynxs --values observability-values.yaml
+
+# Verify metrics endpoint
+kubectl port-forward -n rynxs svc/rynxs-metrics 8080:8080
+curl http://localhost:8080/metrics
+
+# View structured JSON logs
+kubectl logs -n rynxs -l app.kubernetes.io/name=rynxs --tail=50
+```
+
+**Available Metrics**:
+- `rynxs_events_total` (Counter): Total events appended to event log (label: `event_type`)
+- `rynxs_reconcile_duration_seconds` (Histogram): Reconcile operation duration (label: `resource_type`)
+- `rynxs_leader_election_status` (Gauge): Leader election status (1=leader, 0=follower)
+- `rynxs_replay_duration_seconds` (Histogram): Event log replay duration
+- `rynxs_checkpoint_create_duration_seconds` (Histogram): Checkpoint creation duration
+- `rynxs_checkpoint_verify_failures_total` (Counter): Checkpoint verification failures
+
 ## Upgrade
 
 ### Upgrading the Chart
