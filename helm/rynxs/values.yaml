@@ -60,12 +60,11 @@ logging:
   level: INFO
   format: json
 
-# Security
+# Security (Pod-level)
 securityContext:
   runAsNonRoot: true
   runAsUser: 1000
   fsGroup: 1000
-  readOnlyRootFilesystem: true
 
 # Probes (E1.2)
 probes:
