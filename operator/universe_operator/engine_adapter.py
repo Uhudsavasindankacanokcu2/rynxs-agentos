@@ -130,7 +130,9 @@ class EngineAdapter:
                 d[key] = value
 
         # Defensive copy to avoid mutating caller input
-        norm = copy.deepcopy(spec or {})
+        # Convert K8s object to dict if needed
+        spec_dict = dict(spec) if spec else {}
+        norm = copy.deepcopy(spec_dict)
 
         # Top-level defaults
         _set_default(norm, "role", "worker")
