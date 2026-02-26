@@ -31,6 +31,9 @@ persistence:
   size: 10Gi
   storageClass: ""  # Use cluster default
   accessMode: ReadWriteOnce
+  # Keep PVC on helm uninstall (prevents event log deletion)
+  # WARNING: If true, PVC will become orphaned and may cause name collision on reinstall
+  keepOnUninstall: false
 
 # Leader Election (E3)
 leaderElection:
@@ -58,6 +61,16 @@ metrics:
     # prometheus.io/scrape: "true"
     # prometheus.io/port: "8080"
     # prometheus.io/path: "/metrics"
+
+  # ServiceMonitor for Prometheus Operator
+  # (https://github.com/prometheus-operator/prometheus-operator)
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+    relabelings: []
+    metricRelabelings: []
 
 # Logging
 logging:

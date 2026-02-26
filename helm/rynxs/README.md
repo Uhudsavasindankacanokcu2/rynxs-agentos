@@ -107,6 +107,8 @@ helm install rynxs ./helm/rynxs --values s3-values.yaml
 
 #### Observability (Metrics + Structured Logging)
 
+**Vanilla Prometheus (annotation-based discovery)**:
+
 ```yaml
 # observability-values.yaml
 metrics:
@@ -121,6 +123,30 @@ logging:
   level: INFO
   format: json  # Structured JSON logs with trace_id
 ```
+
+**Prometheus Operator (ServiceMonitor)**:
+
+```yaml
+# observability-values.yaml
+metrics:
+  enabled: true
+  port: 8080
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    labels:
+      prometheus: kube-prometheus  # Match your Prometheus selector
+
+logging:
+  level: INFO
+  format: json
+```
+
+**Important Notes**:
+- **Metrics path**: Currently fixed at `/metrics` (limitation of `prometheus_client.start_http_server()`). The `metrics.path` value is for documentation/future extensibility.
+- **ServiceMonitor troubleshooting**: If Prometheus Operator doesn't scrape, check [official troubleshooting guide](https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/troubleshooting.md).
+- **Security**: Metrics endpoint is HTTP-only by default. For TLS, use a service mesh (Istio/Linkerd) or configure `prometheus_client` HTTPS options in a custom build.
 
 ```bash
 # Install with observability enabled
@@ -189,11 +215,21 @@ kubectl get agents -n rynxs
 ## Uninstall
 
 ```bash
-# Uninstall release (removes operator, RBAC, PVC, etc.)
+# Uninstall release (removes operator, RBAC, Service, etc.)
 helm uninstall rynxs
 ```
 
-**Important**: `helm uninstall` does **not** delete CRDs. This is intentional to prevent accidental data loss (custom resources would be cascade-deleted if CRDs are removed).
+**Important Notes**:
+
+1. **CRDs are NOT deleted**: `helm uninstall` does **not** delete CRDs. This is intentional to prevent accidental data loss (custom resources would be cascade-deleted if CRDs are removed).
+
+2. **PVC behavior**: By default, the event log PVC is deleted on uninstall. To preserve event logs across uninstalls:
+   ```yaml
+   # values.yaml
+   persistence:
+     keepOnUninstall: true  # Adds helm.sh/resource-policy: keep annotation
+   ```
+   **Warning**: If `keepOnUninstall: true`, the PVC will become orphaned and may cause a name collision on reinstall. You must manually delete the PVC or use a different release name. See [Helm documentation](https://helm.sh/docs/howto/charts_tips_and_tricks/#tell-helm-not-to-uninstall-a-resource) for details.
 
 **To completely remove CRDs** (⚠️ this deletes all custom resources):
 

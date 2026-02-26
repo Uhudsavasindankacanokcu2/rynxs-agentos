@@ -5,6 +5,10 @@ metadata:
   name: {{ include "rynxs.fullname" . }}-logs
   labels:
     {{- include "rynxs.labels" . | nindent 4 }}
+  {{- if .Values.persistence.keepOnUninstall }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
 spec:
   accessModes:
     - {{ .Values.persistence.accessMode | quote }}
