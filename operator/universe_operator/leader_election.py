@@ -2,6 +2,34 @@
 Leader election using Kubernetes Lease objects.
 
 Default mode: enabled only when RYNXS_LEADER_ELECTION_ENABLED=1.
+
+## Fencing Tokens
+
+This implementation tracks lease metadata (resourceVersion, renewTime, epoch)
+as **forensic markers** for post-mortem split-brain analysis. These tokens
+are **NOT enforcement mechanisms** - they do not prevent split-brain scenarios.
+
+**Fencing token purpose:**
+- **Forensics**: Identify which leader wrote which events during split-brain
+- **Debugging**: Trace leadership transitions via epoch counter
+- **Audit trail**: Event metadata includes holder_identity and lease state
+
+**What fencing tokens DO NOT do:**
+- They do NOT prevent two leaders from writing simultaneously
+- They do NOT provide distributed locking guarantees
+- They do NOT replace CAS (compare-and-swap) in event store
+
+**Multi-layered split-brain prevention:**
+1. Pre-apply leadership check (before action execution)
+2. Post-apply leadership check (after action execution, before event log)
+3. CAS event append (S3 If-None-Match prevents duplicate seq writes)
+4. Leader loss cooldown (sleep leaseDuration/2 to prevent flapping)
+5. Fencing tokens in event payload (for forensic analysis)
+
+For enforcement, rely on:
+- S3 conditional writes (If-None-Match) at infrastructure level
+- Idempotent action application (ConfigMap/Deployment patches)
+- Event log CAS semantics (append-only, sequence number conflicts rejected)
 """
 
 from __future__ import annotations

@@ -117,6 +117,43 @@ Critical alerts for production HA deployment (E4.4).
 
 ---
 
+### 5. RynxsEventStoreErrorsHigh
+
+**Severity**: Critical
+**Purpose**: Detect S3 event log write failures (credential drift, bucket policy, network issues)
+
+```yaml
+- alert: RynxsEventStoreErrorsHigh
+  expr: rate(rynxs_s3_put_errors_total[5m]) > 0.05
+  for: 5m
+  labels:
+    severity: critical
+    component: rynxs-operator
+  annotations:
+    summary: "High rate of S3 event log write failures"
+    description: "S3 PutObject error rate is {{ $value | humanize }}/sec. Leader cannot append events. Check S3 credentials, bucket policy (If-None-Match enforcement), and network connectivity."
+    runbook_url: "https://github.com/rynxs/rynxs-agentos/blob/main/docs/PROMETHEUS_ALERTS.md#runbook-rynxseventstoreerrorshigh"
+```
+
+**Error Types** (label: `error_type`):
+- `AccessDenied`: IAM credentials invalid or bucket policy blocking write
+- `PreconditionFailed`: If-None-Match conflict (normal during retry, critical if sustained)
+- `NoSuchBucket`: Bucket deleted or misconfigured endpoint
+- `NetworkError`: Timeout, DNS failure, or S3 service disruption
+
+**Threshold Rationale**:
+- `rate() > 0.05` = >3 errors per minute
+- Normal: 0 errors (all writes succeed, or retries succeed within same minute)
+- Critical: Sustained errors indicate infrastructure failure (not transient retry)
+- `for: 5m` ensures this is not a transient S3 blip
+
+**Expected Behavior**:
+- Healthy: `rynxs_s3_put_errors_total` counter stays 0 or increases slowly (rare transient failures)
+- During split-brain: `PreconditionFailed` spikes briefly, then resolves (leader election stabilizes)
+- Infrastructure failure: `AccessDenied` or `NoSuchBucket` errors sustained
+
+---
+
 ## Runbooks
 
 ### Runbook: RynxsNoLeader
@@ -495,6 +532,114 @@ kubectl drain node-1 --dry-run=server --ignore-daemonsets
 **References**:
 - [Kubernetes PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
 - [PDB Best Practices](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/#pod-disruption-budgets)
+
+---
+
+### Runbook: RynxsEventStoreErrorsHigh
+
+**Problem**: Operator cannot write events to S3. Event log append failures sustained.
+
+**Diagnosis**:
+
+1. **Check operator logs for S3 errors**:
+   ```bash
+   kubectl logs -n rynxs -l app.kubernetes.io/name=rynxs --tail=100 | grep -i "s3\|ClientError"
+   ```
+
+   **Look for**:
+   - `AccessDenied` → IAM/bucket policy issue
+   - `PreconditionFailed` → If-None-Match conflict (split-brain or sequence collision)
+   - `NoSuchBucket` → Bucket deleted or wrong endpoint
+   - `RequestTimeout` → Network/S3 service issue
+
+2. **Check S3 bucket policy** (see [S3_BUCKET_POLICY.md](S3_BUCKET_POLICY.md)):
+   ```bash
+   aws s3api get-bucket-policy --bucket rynxs-events-prod --output text | jq .
+   ```
+
+   **Verify**:
+   - Policy includes `s3:if-none-match` condition (requires If-None-Match header)
+   - Principal ARN matches operator IAM role
+
+3. **Test conditional write manually**:
+   ```bash
+   aws s3api put-object \
+     --bucket rynxs-events-prod \
+     --key events/test-$(date +%s).json \
+     --body /dev/null \
+     --if-none-match '*'
+   ```
+
+   **Expected**: 200 OK (if test key doesn't exist)
+   **If fails**: Check IAM permissions, bucket policy, endpoint configuration
+
+4. **Check IAM role permissions**:
+   ```bash
+   # Verify operator pod's IAM role
+   kubectl exec -n rynxs deployment/rynxs-operator -- env | grep AWS
+
+   # Check IAM policy allows s3:PutObject
+   aws iam get-role-policy --role-name rynxs-operator --policy-name S3EventStorePolicy
+   ```
+
+5. **Check for split-brain** (if `PreconditionFailed` errors):
+   ```bash
+   # Verify exactly 1 leader
+   kubectl exec -n rynxs deployment/rynxs-operator -- \
+     curl -s http://localhost:8080/metrics | grep rynxs_leader_election_status
+
+   # Expected: sum = 1 (across all pods)
+   ```
+
+**Common Causes & Resolutions**:
+
+| Error Type | Cause | Resolution |
+|------------|-------|------------|
+| `AccessDenied` | IAM credentials expired or rotated | Update Kubernetes secret with new credentials, restart operator |
+| `AccessDenied` | Bucket policy blocks write | Verify bucket policy has correct principal ARN and `s3:if-none-match` condition |
+| `PreconditionFailed` (sustained) | Split-brain: multiple leaders writing | Check leader election metrics, verify Lease resource, restart operator pods |
+| `NoSuchBucket` | Bucket deleted or wrong region | Recreate bucket or fix `S3_BUCKET` / `S3_ENDPOINT` env vars in Deployment |
+| `RequestTimeout` | Network partition to S3 | Check VPC routing, Security Groups, S3 VPC endpoint configuration |
+
+**Immediate Actions**:
+
+1. **If IAM/policy issue**:
+   ```bash
+   # Fix bucket policy (replace principal ARN)
+   aws s3api put-bucket-policy --bucket rynxs-events-prod --policy file://bucket-policy.json
+
+   # Restart operator to pick up new credentials
+   kubectl rollout restart -n rynxs deployment/rynxs-operator
+   ```
+
+2. **If split-brain**:
+   ```bash
+   # Force re-election by deleting Lease
+   kubectl delete lease -n rynxs rynxs-operator-leader
+
+   # Verify new leader elected
+   kubectl logs -n rynxs -l app.kubernetes.io/name=rynxs --tail=20 | grep -i "leader"
+   ```
+
+3. **If bucket missing**:
+   ```bash
+   # Recreate bucket with Object Lock (optional)
+   aws s3api create-bucket --bucket rynxs-events-prod --region us-east-1
+
+   # Apply bucket policy
+   aws s3api put-bucket-policy --bucket rynxs-events-prod --policy file://bucket-policy.json
+   ```
+
+**Post-Incident**:
+- Review S3 CloudWatch metrics for 4xx/5xx errors during incident window
+- Check event log for gaps (missing sequence numbers)
+- If split-brain occurred: Inspect event metadata fencing tokens for epoch transitions
+- Update monitoring: Add CloudTrail alerts for `DeleteBucket`, `PutBucketPolicy` API calls
+
+**References**:
+- [S3 Bucket Policy Documentation](S3_BUCKET_POLICY.md)
+- [AWS S3 Conditional Writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html)
+- [Leader Election Implementation](../operator/universe_operator/leader_election.py)
 
 ---
 

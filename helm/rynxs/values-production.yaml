@@ -49,7 +49,7 @@ topologySpreadConstraints:
         app.kubernetes.io/name: rynxs
   - maxSkew: 1
     topologyKey: topology.kubernetes.io/zone  # Spread across zones
-    whenUnsatisfiable: ScheduleAnyway
+    whenUnsatisfiable: DoNotSchedule  # HARD constraint: never colocate in same zone
     labelSelector:
       matchLabels:
         app.kubernetes.io/name: rynxs

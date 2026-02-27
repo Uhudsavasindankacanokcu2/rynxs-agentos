@@ -94,12 +94,15 @@ minio:
   enabled: false
   image:
     repository: minio/minio
-    tag: latest
+    tag: RELEASE.2024-11-07T00-15-16Z  # Pin to specific version for supply chain security
     pullPolicy: IfNotPresent
 
-  # MinIO credentials (WARNING: Change in production!)
-  rootUser: minioadmin
-  rootPassword: minioadmin
+  # MinIO credentials
+  # RECOMMENDED: Use existingSecret for production
+  # If existingSecret is set, rootUser/rootPassword are ignored
+  existingSecret: ""  # Name of existing secret with MINIO_ROOT_USER and MINIO_ROOT_PASSWORD keys
+  rootUser: minioadmin  # Only used if existingSecret is empty (dev/test only)
+  rootPassword: minioadmin  # Only used if existingSecret is empty (dev/test only)
 
   # Storage
   persistence:
