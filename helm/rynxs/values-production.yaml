@@ -1,0 +1,249 @@
+# Production Best-Practice Values for Rynxs Operator
+#
+# This file demonstrates production-ready configuration with all hardening features enabled.
+# Use this as a template for your production deployment.
+#
+# Installation:
+#   helm install rynxs ./helm/rynxs --values values-production.yaml --namespace rynxs --create-namespace
+#
+# Prerequisites:
+#   1. S3 bucket with conditional write policy (see docs/S3_BUCKET_POLICY.md)
+#   2. Kubernetes cluster with multi-zone support (for topology spread)
+#   3. Prometheus Operator (if using ServiceMonitor)
+#   4. Monitoring namespace with label kubernetes.io/metadata.name=monitoring
+
+# ========================================
+# Image Configuration
+# ========================================
+image:
+  repository: ghcr.io/rynxs/operator
+  tag: v0.1.0  # Replace with your version
+  pullPolicy: IfNotPresent
+
+# ========================================
+# High Availability (HA) Configuration
+# ========================================
+replicaCount: 3  # Recommended: 3 for multi-zone HA, 5 for very high availability
+
+# Leader Election (E3)
+leaderElection:
+  enabled: true
+  leaseDurationSeconds: 30  # How long follower waits before taking over
+  renewDeadlineSeconds: 20  # Leader must renew within this window
+  retryPeriodSeconds: 5     # Check interval
+
+# PodDisruptionBudget (E3.6)
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1  # At least 1 pod during voluntary disruptions
+  # Alternative: maxUnavailable: 2
+
+# Topology Spread (E3.7 production hardening)
+# Spreads pods across nodes AND zones for maximum resilience
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname  # Spread across nodes
+    whenUnsatisfiable: ScheduleAnyway  # Soft constraint (prefer, don't require)
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: rynxs
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone  # Spread across zones
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: rynxs
+
+# ========================================
+# Resources
+# ========================================
+resources:
+  requests:
+    cpu: 200m       # Increased from default 100m for production load
+    memory: 256Mi   # Increased from default 128Mi
+  limits:
+    cpu: 1000m      # Increased from default 500m
+    memory: 1Gi     # Increased from default 512Mi
+
+# ========================================
+# Event Log Storage (S3 + MinIO)
+# ========================================
+# Option 1: External S3 (AWS, GCS, etc.) - RECOMMENDED FOR PRODUCTION
+logSink:
+  type: s3
+  s3:
+    endpoint: "https://s3.us-east-1.amazonaws.com"  # Or your S3-compatible endpoint
+    bucket: "rynxs-events-prod"
+    region: "us-east-1"
+    accessKeySecret: "rynxs-s3-credentials"  # K8s secret name
+
+# Option 2: MinIO (for testing or on-prem deployments)
+# Uncomment to use MinIO instead of external S3
+# minio:
+#   enabled: true
+#   rootUser: minioadmin
+#   rootPassword: CHANGE_ME_IN_PRODUCTION  # ⚠️ CHANGE THIS
+#   persistence:
+#     enabled: true
+#     size: 50Gi  # Size for event log storage
+#     storageClass: ""  # Use cluster default or specify (e.g., "gp3", "ssd")
+#   resources:
+#     requests:
+#       cpu: 500m
+#       memory: 1Gi
+#     limits:
+#       cpu: 2000m
+#       memory: 4Gi
+#   service:
+#     type: ClusterIP
+#     port: 9000
+
+# If using MinIO, S3 endpoint is auto-configured:
+# logSink:
+#   type: s3
+#   s3:
+#     bucket: "rynxs-events"
+#     region: "us-east-1"
+#     accessKeySecret: "rynxs-s3-credentials"
+
+# ========================================
+# Observability (E4)
+# ========================================
+metrics:
+  enabled: true
+  port: 8080
+  path: /metrics  # Fixed at /metrics (prometheus_client limitation)
+
+  # ServiceMonitor for Prometheus Operator
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    labels:
+      prometheus: kube-prometheus  # Match your Prometheus selector
+    # Optional: Add relabeling rules
+    # relabelings:
+    #   - sourceLabels: [__meta_kubernetes_pod_name]
+    #     targetLabel: pod
+
+  # NetworkPolicy for metrics endpoint security
+  networkPolicy:
+    enabled: true  # ⚠️ ENABLE IN PRODUCTION
+    # Standard K8s 1.21+ label
+    prometheusNamespaceSelector:
+      kubernetes.io/metadata.name: monitoring
+    # Allow scraping from Prometheus pods
+    prometheusPodSelector:
+      app.kubernetes.io/name: prometheus
+
+# Logging
+logging:
+  level: INFO  # Use DEBUG for troubleshooting, INFO for production
+  format: json  # Structured JSON logs with trace_id
+
+# ========================================
+# Security
+# ========================================
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# RBAC
+rbac:
+  create: true
+  serviceAccountName: rynxs-operator
+
+# ========================================
+# Probes (E1.2)
+# ========================================
+probes:
+  liveness:
+    enabled: true
+    path: /healthz
+    port: 8080
+    initialDelaySeconds: 15  # Increased from default 10s
+    periodSeconds: 10
+    timeoutSeconds: 3        # Increased from default 2s
+    failureThreshold: 6
+  readiness:
+    enabled: true  # Enable in production to avoid traffic during startup
+    path: /ready
+    port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# ========================================
+# Persistence (file-based event log, not used when S3 is enabled)
+# ========================================
+persistence:
+  enabled: false  # Disabled when using S3
+  # If using file-based storage:
+  # enabled: true
+  # size: 50Gi
+  # storageClass: ""
+  # accessMode: ReadWriteOnce
+  # keepOnUninstall: true  # Preserve event log across uninstalls
+
+# ========================================
+# CRDs
+# ========================================
+crds:
+  create: true  # Helm will install CRDs on first install
+
+# ========================================
+# Optional: Extra Configuration
+# ========================================
+# extraEnv:
+#   - name: RYNXS_WRITER_ID
+#     value: "prod-cluster-1"  # Optional: Identify which cluster wrote events
+
+# extraArgs: []
+
+# nameOverride: ""
+# fullnameOverride: ""
+
+# ========================================
+# Production Deployment Checklist
+# ========================================
+# Before deploying, ensure:
+# [ ] S3 bucket created with conditional write policy (docs/S3_BUCKET_POLICY.md)
+# [ ] Kubernetes secret created: kubectl create secret generic rynxs-s3-credentials --from-literal=AWS_ACCESS_KEY_ID=... --from-literal=AWS_SECRET_ACCESS_KEY=...
+# [ ] Monitoring namespace labeled: kubectl label namespace monitoring kubernetes.io/metadata.name=monitoring
+# [ ] Prometheus ServiceMonitor CRD installed (if using Prometheus Operator)
+# [ ] Cluster has multi-zone nodes (for topology spread)
+# [ ] PodDisruptionBudget verified: kubectl get pdb -n rynxs rynxs-operator
+# [ ] Prometheus alerts configured (docs/PROMETHEUS_ALERTS.md)
+# [ ] Runbooks reviewed and team trained
+
+# ========================================
+# Post-Deployment Verification
+# ========================================
+# 1. Check operator pods:
+#    kubectl get pods -n rynxs -l app.kubernetes.io/name=rynxs
+#    Expected: 3 pods running, spread across nodes/zones
+#
+# 2. Verify leader election:
+#    kubectl logs -n rynxs -l app.kubernetes.io/name=rynxs --tail=20 | grep -i leader
+#    Expected: Exactly 1 pod with "Leader status: LEADER"
+#
+# 3. Check metrics:
+#    kubectl port-forward -n rynxs svc/rynxs-metrics 8080:8080
+#    curl http://localhost:8080/metrics | grep rynxs_leader_election_status
+#    Expected: sum = 1 (across all pods)
+#
+# 4. Test agent creation:
+#    kubectl apply -f examples/agent-basic.yaml -n rynxs
+#    kubectl get agents -n rynxs
+#
+# 5. Verify S3 event log:
+#    aws s3 ls s3://rynxs-events-prod/events/ | head -20
+#    Expected: Event files (0000000000.json, 0000000001.json, ...)
+#
+# 6. Run HA failover test:
+#    ./scripts/e2e-ha-failover.sh
+#
+# 7. Monitor Prometheus alerts:
+#    kubectl get prometheusrule -n rynxs rynxs-operator-alerts

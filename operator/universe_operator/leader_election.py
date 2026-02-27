@@ -84,6 +84,11 @@ class LeaderElector:
         self._last_check = 0.0
         self._api = client.CoordinationV1Api()
 
+        # Fencing token metadata (production hardening)
+        self._lease_resource_version: Optional[str] = None
+        self._lease_renew_time: Optional[datetime] = None
+        self._lease_epoch = 0  # Incremented on each leadership acquisition
+
     @classmethod
     def from_env(cls) -> "LeaderElector":
         return cls(
@@ -103,6 +108,25 @@ class LeaderElector:
             return self._leader
         return self.ensure_leader()
 
+    def get_fencing_token(self) -> dict:
+        """
+        Get fencing token metadata for forensic analysis.
+
+        Returns dict with:
+        - holder_identity: Who holds the lease
+        - resource_version: Lease resourceVersion (for conflict detection)
+        - renew_time: Last renew timestamp
+        - epoch: Leadership acquisition count (incremented on takeover)
+
+        Used in event payloads to enable post-mortem analysis of split-brain scenarios.
+        """
+        return {
+            "holder_identity": self.identity,
+            "resource_version": self._lease_resource_version,
+            "renew_time": self._lease_renew_time.isoformat() if self._lease_renew_time else None,
+            "epoch": self._lease_epoch,
+        }
+
     def ensure_leader(self) -> bool:
         if not self.config.enabled:
             self._leader = True
@@ -110,6 +134,7 @@ class LeaderElector:
 
         now = time.time()
         self._last_check = now
+        was_leader = self._leader
 
         try:
             lease = self._api.read_namespaced_lease(self.config.lease_name, self.namespace)
@@ -117,11 +142,13 @@ class LeaderElector:
             if ex.status == 404:
                 return self._create_lease()
             self._leader = False
+            self._handle_leadership_loss(was_leader)
             return False
 
         spec = lease.spec
         if spec is None:
             self._leader = False
+            self._handle_leadership_loss(was_leader)
             return False
 
         if spec.holder_identity == self.identity:
@@ -131,6 +158,7 @@ class LeaderElector:
             return self._takeover_lease(lease)
 
         self._leader = False
+        self._handle_leadership_loss(was_leader)
         return False
 
     def _create_lease(self) -> bool:
@@ -149,8 +177,10 @@ class LeaderElector:
             spec=spec,
         )
         try:
-            self._api.create_namespaced_lease(self.namespace, lease)
+            created_lease = self._api.create_namespaced_lease(self.namespace, lease)
             self._leader = True
+            self._lease_epoch += 1  # New leadership epoch
+            self._update_fencing_metadata(created_lease)
             return True
         except ApiException:
             self._leader = False
@@ -163,12 +193,13 @@ class LeaderElector:
             lease.spec.renew_time = _now()
             lease.spec.lease_duration_seconds = self.config.lease_duration_seconds
             try:
-                self._api.replace_namespaced_lease(
+                renewed_lease = self._api.replace_namespaced_lease(
                     name=self.config.lease_name,
                     namespace=self.namespace,
                     body=lease,
                 )
                 self._leader = True
+                self._update_fencing_metadata(renewed_lease)
                 return True
             except ApiException as ex:
                 if ex.status == 409 and attempt < max_retries - 1:
@@ -209,12 +240,14 @@ class LeaderElector:
             lease.spec.renew_time = now
             lease.spec.lease_duration_seconds = self.config.lease_duration_seconds
             try:
-                self._api.replace_namespaced_lease(
+                takeover_lease = self._api.replace_namespaced_lease(
                     name=self.config.lease_name,
                     namespace=self.namespace,
                     body=lease,
                 )
                 self._leader = True
+                self._lease_epoch += 1  # New leadership epoch (takeover)
+                self._update_fencing_metadata(takeover_lease)
                 return True
             except ApiException as ex:
                 if ex.status == 409 and attempt < max_retries - 1:
@@ -262,3 +295,25 @@ class LeaderElector:
         except Exception:
             # Metrics may not be initialized, ignore
             pass
+
+    def _update_fencing_metadata(self, lease: client.V1Lease) -> None:
+        """Update fencing token metadata from lease object."""
+        if lease.metadata:
+            self._lease_resource_version = lease.metadata.resource_version
+        if lease.spec:
+            self._lease_renew_time = lease.spec.renew_time
+
+    def _handle_leadership_loss(self, was_leader: bool) -> None:
+        """
+        Handle leadership loss with cooldown (production hardening).
+
+        When a leader loses leadership, sleep for leaseDuration/2 to prevent
+        immediate re-election attempts that could cause flapping.
+
+        This is a "stop and cool down" pattern recommended for split-brain mitigation.
+        """
+        if was_leader and not self._leader:
+            cooldown = self.config.lease_duration_seconds / 2.0
+            # NOTE: This sleep blocks the ensure_leader() call, but that's intentional
+            # to prevent the pod from immediately competing for leadership again
+            time.sleep(cooldown)

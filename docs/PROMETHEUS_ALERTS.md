@@ -444,9 +444,64 @@ kubectl apply -f clusterrole-backup.yaml
 
 ---
 
+## PodDisruptionBudget Edge Cases
+
+### Warning: minAvailable >= replicaCount Can Block Drains
+
+**Problem**: If `minAvailable` is set too high relative to `replicaCount`, node drains can become stuck.
+
+**Example**:
+```yaml
+# values.yaml
+replicaCount: 3
+podDisruptionBudget:
+  minAvailable: 3  # ❌ BAD: Cannot drain any node
+```
+
+**Symptom**:
+```bash
+kubectl drain node-1
+# Output: cannot evict pod rynxs-operator-xxx: violates PodDisruptionBudget
+```
+
+**Why**: Kubernetes won't drain a node if it would violate PDB. With `minAvailable: 3` and `replicaCount: 3`, draining any node means only 2 pods remain → violates PDB.
+
+**Correct Configuration**:
+```yaml
+# values.yaml
+replicaCount: 3
+podDisruptionBudget:
+  minAvailable: 1  # ✅ GOOD: At least 1 pod always available
+  # OR
+  maxUnavailable: 2  # ✅ GOOD: At most 2 pods can be unavailable
+```
+
+**Rule of Thumb**:
+- `minAvailable` should be `< replicaCount` (ideally `≤ ceil(replicaCount/2)`)
+- For 3 replicas: `minAvailable: 1` or `maxUnavailable: 2`
+- For 5 replicas: `minAvailable: 2` or `maxUnavailable: 3`
+
+**Testing**:
+```bash
+# Verify PDB allows drains
+kubectl get pdb -n rynxs rynxs-operator -o yaml
+# Check: .status.disruptionsAllowed should be > 0
+
+# Attempt drain (dry-run)
+kubectl drain node-1 --dry-run=server --ignore-daemonsets
+# Expected: No PDB violations
+```
+
+**References**:
+- [Kubernetes PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
+- [PDB Best Practices](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/#pod-disruption-budgets)
+
+---
+
 ## References
 
 - [Prometheus Alerting Rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/)
 - [Kubernetes Leader Election](https://kubernetes.io/blog/2016/01/simple-leader-election-with-kubernetes/)
 - [RBAC Permissions](./RBAC.md)
 - [HA Deployment Guide](../helm/rynxs/README.md#high-availability-deployment-leader-election)
+- [PodDisruptionBudget Best Practices](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/#pod-disruption-budgets)

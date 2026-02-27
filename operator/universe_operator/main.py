@@ -159,6 +159,17 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
         event = adapter.agent_to_event(name, namespace, spec, labels, annotations)
         logger.debug(f"Translated to event: type={event.type}, aggregate_id={event.aggregate_id}")
 
+        # Add fencing token to event metadata (production hardening)
+        fencing_token = leader_elector.get_fencing_token() if leader_elector else {}
+        event = Event(
+            type=event.type,
+            aggregate_id=event.aggregate_id,
+            ts=event.ts,
+            payload=event.payload,
+            meta={**(event.meta or {}), "fencing_token": fencing_token},
+            seq=event.seq,
+        )
+
         # Step 2: Append event to log (hash chain + sequence, CAS retry)
         # Split-brain guardrail: check leadership before side effects
         if not _require_leader(logger):
@@ -206,6 +217,8 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
             actions_canonical = actions_to_canonical(actions)
             actions_json = canonical_json_str(actions_canonical)
             actions_hash = hashlib.sha256(actions_json.encode("utf-8")).hexdigest()
+            # Fencing token for decision event (production hardening)
+            decision_fencing_token = leader_elector.get_fencing_token() if leader_elector else {}
             decision_event = _with_writer_id(Event(
                 type="ActionsDecided",
                 aggregate_id=event_stored.aggregate_id,
@@ -220,7 +233,7 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
                     "actions_hash": actions_hash,
                     "action_ids": [action_id(a) for a in actions],
                 },
-                meta={"source": "decision_layer"},
+                meta={"source": "decision_layer", "fencing_token": decision_fencing_token},
             ))
             event_store.append_with_retry(decision_event)
             track_event(decision_event.type)  # Track event metric (E4.1)

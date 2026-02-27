@@ -14,34 +14,34 @@ podDisruptionBudget:
   minAvailable: 1  # At least 1 pod must be available during disruptions
   # maxUnavailable: 1  # Alternative: max 1 pod can be unavailable
 
-# Pod scheduling (E3 post-review)
-# Spread pods across nodes/zones to prevent single point of failure
-affinity:
-  podAntiAffinity:
-    # Prefer to schedule pods on different nodes (soft constraint)
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchLabels:
-              app.kubernetes.io/name: rynxs
-          topologyKey: kubernetes.io/hostname
+# Pod scheduling (E3 production hardening)
+# RECOMMENDED: Use topologySpreadConstraints for multi-zone HA
+# Spreads pods across nodes AND zones with deterministic maxSkew control
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname  # Spread across nodes
+    whenUnsatisfiable: ScheduleAnyway  # Soft constraint (prefer, don't require)
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: rynxs
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone  # Spread across zones
+    whenUnsatisfiable: ScheduleAnyway  # Soft constraint
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: rynxs
 
-# Topology spread constraints (alternative to affinity, more flexible)
-# Uncomment to use instead of affinity
-# topologySpreadConstraints:
-#   - maxSkew: 1
-#     topologyKey: kubernetes.io/hostname
-#     whenUnsatisfiable: ScheduleAnyway  # Soft constraint
-#     labelSelector:
-#       matchLabels:
-#         app.kubernetes.io/name: rynxs
-#   - maxSkew: 1
-#     topologyKey: topology.kubernetes.io/zone
-#     whenUnsatisfiable: ScheduleAnyway
-#     labelSelector:
-#       matchLabels:
-#         app.kubernetes.io/name: rynxs
+# Alternative: podAntiAffinity (less flexible, use if cluster doesn't support topologySpreadConstraints)
+# Uncomment to use instead of topologySpreadConstraints
+# affinity:
+#   podAntiAffinity:
+#     preferredDuringSchedulingIgnoredDuringExecution:
+#       - weight: 100
+#         podAffinityTerm:
+#           labelSelector:
+#             matchLabels:
+#               app.kubernetes.io/name: rynxs
+#           topologyKey: kubernetes.io/hostname
 
 # Resources
 resources:
@@ -142,16 +142,17 @@ metrics:
     relabelings: []
     metricRelabelings: []
 
-  # NetworkPolicy for metrics endpoint (E3 post-review)
+  # NetworkPolicy for metrics endpoint (E3 production hardening)
   # Restricts access to metrics endpoint (HTTP-only) to Prometheus pods
   networkPolicy:
     enabled: false  # Disabled by default, enable in production for security
     # Allow scraping from specific namespace (e.g., monitoring)
+    # IMPORTANT: Use standard K8s 1.21+ label (not .name)
     prometheusNamespaceSelector: {}
-      # name: monitoring
+      # kubernetes.io/metadata.name: monitoring
     # Allow scraping from specific pods (e.g., prometheus)
     prometheusPodSelector: {}
-      # app: prometheus
+      # app.kubernetes.io/name: prometheus
 
 # Logging
 logging:
