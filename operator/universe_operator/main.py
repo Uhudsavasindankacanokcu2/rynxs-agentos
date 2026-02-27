@@ -105,17 +105,20 @@ def _startup(settings: kopf.OperatorSettings, **_):
 
         def leader_election_loop():
             logger = get_logger(__name__)
+            previous_status = None
             while True:
                 try:
                     is_leader = leader_elector.ensure_leader()
-                    set_leader_status(is_leader)
+                    set_leader_status(is_leader, previous_status=previous_status)
                     if is_leader:
                         logger.debug("Leader status: LEADER")
                     else:
                         logger.debug("Leader status: FOLLOWER")
+                    previous_status = is_leader
                 except Exception as e:
                     logger.error(f"Leader election error: {e}")
-                    set_leader_status(False)
+                    set_leader_status(False, previous_status=previous_status)
+                    previous_status = False
 
                 import time
                 time.sleep(leader_elector.config.retry_period_seconds)
@@ -157,6 +160,11 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
         logger.debug(f"Translated to event: type={event.type}, aggregate_id={event.aggregate_id}")
 
         # Step 2: Append event to log (hash chain + sequence, CAS retry)
+        # Split-brain guardrail: check leadership before side effects
+        if not _require_leader(logger):
+            logger.warn("Leadership lost before event append, aborting reconcile")
+            return
+
         try:
             append_result = event_store.append_with_retry(_with_writer_id(event))
             event_stored = append_result.event
@@ -189,6 +197,11 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
             raise
 
         # Step 4.5: Log decision ledger (ActionsDecided)
+        # Split-brain guardrail: check leadership before logging decisions
+        if not _require_leader(logger):
+            logger.warn("Leadership lost before ActionsDecided, aborting reconcile")
+            return
+
         try:
             actions_canonical = actions_to_canonical(actions)
             actions_json = canonical_json_str(actions_canonical)
@@ -216,6 +229,11 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
             raise
 
         # Step 5: Execute actions (side effects)
+        # Split-brain guardrail: check leadership before K8s resource mutations
+        if not _require_leader(logger):
+            logger.warn("Leadership lost before executor apply, aborting reconcile")
+            return
+
         try:
             executor = ExecutorLayer(event_store, clock, logger)
             feedback_events = executor.apply(actions)
@@ -255,6 +273,10 @@ def task_reconcile(spec, name, namespace, status, logger, **_):
             return
 
     if phase == "Pending":
+        # Split-brain guardrail: check leadership before task assignment (pod exec + status update)
+        if not _require_leader(logger):
+            logger.warn("Leadership lost before task assignment, aborting reconcile")
+            return
         controller.assign_task(name, spec)
 
 @kopf.on.create('universe.ai', 'v1alpha1', 'teams')
@@ -264,6 +286,12 @@ def team_reconcile(spec, name, namespace, logger, **_):
         return
     logger.info(f"Reconciling Team {namespace}/{name}")
     controller = TeamController(namespace, logger)
+
+    # Split-brain guardrail: check leadership before team reconcile (PVC creation)
+    if not _require_leader(logger):
+        logger.warn("Leadership lost before team reconcile, aborting")
+        return
+
     status = controller.reconcile_team(name, spec)
     return {"status": status}
 

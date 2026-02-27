@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import time
+import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
@@ -156,37 +157,94 @@ class LeaderElector:
             return False
 
     def _renew_lease(self, lease: client.V1Lease) -> bool:
-        lease.spec.renew_time = _now()
-        lease.spec.lease_duration_seconds = self.config.lease_duration_seconds
-        try:
-            self._api.replace_namespaced_lease(
-                name=self.config.lease_name,
-                namespace=self.namespace,
-                body=lease,
-            )
-            self._leader = True
-            return True
-        except ApiException:
-            self._leader = False
-            return False
+        """Renew lease with 409 retry logic."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            lease.spec.renew_time = _now()
+            lease.spec.lease_duration_seconds = self.config.lease_duration_seconds
+            try:
+                self._api.replace_namespaced_lease(
+                    name=self.config.lease_name,
+                    namespace=self.namespace,
+                    body=lease,
+                )
+                self._leader = True
+                return True
+            except ApiException as ex:
+                if ex.status == 409 and attempt < max_retries - 1:
+                    # 409 Conflict: resourceVersion mismatch, retry with fresh lease
+                    backoff = (2 ** attempt) * 0.1 + random.uniform(0, 0.05)  # Exponential + jitter
+                    time.sleep(backoff)
+                    try:
+                        lease = self._api.read_namespaced_lease(self.config.lease_name, self.namespace)
+                        # Verify we still hold the lease
+                        if lease.spec and lease.spec.holder_identity != self.identity:
+                            self._leader = False
+                            self._track_failure("lost_lease_during_renew")
+                            return False
+                        # Continue retry loop with fresh lease
+                    except ApiException:
+                        self._leader = False
+                        self._track_failure("api_error_during_retry")
+                        return False
+                else:
+                    # Non-409 error or max retries exceeded
+                    self._leader = False
+                    if ex.status == 409:
+                        self._track_failure("conflict_retries_exhausted")
+                    else:
+                        self._track_failure("api_error")
+                    return False
+        self._leader = False
+        self._track_failure("conflict_retries_exhausted")
+        return False
 
     def _takeover_lease(self, lease: client.V1Lease) -> bool:
-        now = _now()
-        lease.spec.holder_identity = self.identity
-        lease.spec.acquire_time = now
-        lease.spec.renew_time = now
-        lease.spec.lease_duration_seconds = self.config.lease_duration_seconds
-        try:
-            self._api.replace_namespaced_lease(
-                name=self.config.lease_name,
-                namespace=self.namespace,
-                body=lease,
-            )
-            self._leader = True
-            return True
-        except ApiException:
-            self._leader = False
-            return False
+        """Takeover expired lease with 409 retry logic."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            now = _now()
+            lease.spec.holder_identity = self.identity
+            lease.spec.acquire_time = now
+            lease.spec.renew_time = now
+            lease.spec.lease_duration_seconds = self.config.lease_duration_seconds
+            try:
+                self._api.replace_namespaced_lease(
+                    name=self.config.lease_name,
+                    namespace=self.namespace,
+                    body=lease,
+                )
+                self._leader = True
+                return True
+            except ApiException as ex:
+                if ex.status == 409 and attempt < max_retries - 1:
+                    # 409 Conflict: another pod may have taken leadership, retry with fresh lease
+                    backoff = (2 ** attempt) * 0.1 + random.uniform(0, 0.05)  # Exponential + jitter
+                    time.sleep(backoff)
+                    try:
+                        lease = self._api.read_namespaced_lease(self.config.lease_name, self.namespace)
+                        # Verify lease is still expired before retrying takeover
+                        if lease.spec and not self._is_expired(lease.spec):
+                            # Someone else renewed it, we lost the race
+                            self._leader = False
+                            self._track_failure("lost_takeover_race")
+                            return False
+                        # Continue retry loop with fresh lease
+                    except ApiException:
+                        self._leader = False
+                        self._track_failure("api_error_during_retry")
+                        return False
+                else:
+                    # Non-409 error or max retries exceeded
+                    self._leader = False
+                    if ex.status == 409:
+                        self._track_failure("conflict_retries_exhausted")
+                    else:
+                        self._track_failure("api_error")
+                    return False
+        self._leader = False
+        self._track_failure("conflict_retries_exhausted")
+        return False
 
     def _is_expired(self, spec: client.V1LeaseSpec) -> bool:
         base = spec.renew_time or spec.acquire_time
@@ -195,3 +253,12 @@ class LeaderElector:
         age = (_now() - base).total_seconds()
         duration = spec.lease_duration_seconds or self.config.lease_duration_seconds
         return age > duration
+
+    def _track_failure(self, reason: str) -> None:
+        """Track leader election failure metric (E4.4)."""
+        try:
+            from .metrics import track_leader_election_failure
+            track_leader_election_failure(reason)
+        except Exception:
+            # Metrics may not be initialized, ignore
+            pass

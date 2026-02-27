@@ -46,6 +46,8 @@ LEADER_ELECTION_STATUS: "Gauge" = None  # type: ignore
 REPLAY_DURATION: "Histogram" = None  # type: ignore
 CHECKPOINT_CREATE_DURATION: "Histogram" = None  # type: ignore
 CHECKPOINT_VERIFY_FAILURES: "Counter" = None  # type: ignore
+LEADER_ELECTION_FAILURES: "Counter" = None  # type: ignore
+LEADER_TRANSITIONS: "Counter" = None  # type: ignore
 
 _metrics_initialized = False
 _metrics_lock = threading.Lock()
@@ -60,6 +62,7 @@ def init_metrics() -> None:
     """
     global EVENTS_TOTAL, RECONCILE_DURATION, LEADER_ELECTION_STATUS
     global REPLAY_DURATION, CHECKPOINT_CREATE_DURATION, CHECKPOINT_VERIFY_FAILURES
+    global LEADER_ELECTION_FAILURES, LEADER_TRANSITIONS
     global _metrics_initialized
 
     with _metrics_lock:
@@ -109,6 +112,20 @@ def init_metrics() -> None:
         CHECKPOINT_VERIFY_FAILURES = Counter(
             "rynxs_checkpoint_verify_failures_total",
             "Total number of checkpoint verification failures",
+        )
+
+        # Leader election failure counter (E4.4)
+        LEADER_ELECTION_FAILURES = Counter(
+            "rynxs_leader_election_failures_total",
+            "Total number of leader election failures (API errors, 409 retries exhausted)",
+            labelnames=["reason"],
+        )
+
+        # Leader transitions counter (E4.4)
+        LEADER_TRANSITIONS = Counter(
+            "rynxs_leader_transitions_total",
+            "Total number of leader transitions (acquired or lost leadership)",
+            labelnames=["event"],  # "acquired" or "lost"
         )
 
         _metrics_initialized = True
@@ -187,12 +204,13 @@ def track_event(event_type: str) -> None:
         EVENTS_TOTAL.labels(event_type=event_type).inc()
 
 
-def set_leader_status(is_leader: bool) -> None:
+def set_leader_status(is_leader: bool, previous_status: bool = None) -> None:
     """
-    Set leader election status metric.
+    Set leader election status metric and track transitions.
 
     Args:
         is_leader: True if this instance is the leader, False otherwise
+        previous_status: Previous leadership status (for transition tracking)
 
     Usage:
         set_leader_status(True)   # This instance became leader
@@ -200,3 +218,24 @@ def set_leader_status(is_leader: bool) -> None:
     """
     if LEADER_ELECTION_STATUS is not None:
         LEADER_ELECTION_STATUS.set(1 if is_leader else 0)
+
+    # Track transitions (E4.4)
+    if LEADER_TRANSITIONS is not None and previous_status is not None:
+        if is_leader and not previous_status:
+            LEADER_TRANSITIONS.labels(event="acquired").inc()
+        elif not is_leader and previous_status:
+            LEADER_TRANSITIONS.labels(event="lost").inc()
+
+
+def track_leader_election_failure(reason: str) -> None:
+    """
+    Track leader election failure.
+
+    Args:
+        reason: Failure reason (e.g., "api_error", "conflict_retries_exhausted")
+
+    Usage:
+        track_leader_election_failure("api_error")
+    """
+    if LEADER_ELECTION_FAILURES is not None:
+        LEADER_ELECTION_FAILURES.labels(reason=reason).inc()
