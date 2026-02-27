@@ -235,7 +235,7 @@ def agent_reconcile(spec, name, namespace, logger, meta, **_):
             return
 
         try:
-            executor = ExecutorLayer(event_store, clock, logger)
+            executor = ExecutorLayer(event_store, clock, logger, leader_elector=leader_elector)
             feedback_events = executor.apply(actions)
             # Track feedback events
             for feedback_event in feedback_events:

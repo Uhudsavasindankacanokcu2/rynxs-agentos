@@ -41,26 +41,27 @@ Critical alerts for production HA deployment (E4.4).
 
 ```yaml
 - alert: RynxsLeaderFlap
-  expr: rate(rynxs_leader_transitions_total[5m]) > 0.1
+  expr: increase(rynxs_leader_transitions_total[5m]) > 3
   for: 5m
   labels:
     severity: warning
     component: rynxs-operator
   annotations:
     summary: "Rynxs operator leader flapping detected"
-    description: "Leader transitions rate is {{ $value | humanize }}/sec over 5 minutes. Expected: <0.01/sec (1 transition per 100s). Check network stability, API server health, and pod crashloops."
+    description: "Leader transitions increased by {{ $value }} in the last 5 minutes. Expected: ≤1 (rolling update). Check network stability, API server health, and pod crashloops."
     runbook_url: "https://github.com/rynxs/rynxs-agentos/blob/main/docs/PROMETHEUS_ALERTS.md#runbook-rynxsleaderflap"
 ```
 
 **Threshold Rationale**:
-- Normal: 1 transition per hour (e.g., rolling update) = 0.00027/sec
-- Warning: >0.1/sec = 1 transition per 10 seconds
+- Normal: 0-1 transitions per 5 minutes (e.g., rolling update)
+- Warning: >3 transitions in 5 minutes = flapping
 - `for: 5m` ensures sustained flapping, not transient blips
+- `increase()` counts absolute transitions (less noisy than `rate()`)
 
 **Expected Values**:
 - `rynxs_leader_transitions_total{event="acquired"}` = total acquisitions
 - `rynxs_leader_transitions_total{event="lost"}` = total losses
-- Rate should be near-zero in stable cluster
+- Increase should be 0-1 in stable cluster, 1-2 during rolling updates
 
 ---
 
@@ -322,13 +323,13 @@ spec:
             description: "No operator pod has held leadership for 2 minutes."
 
         - alert: RynxsLeaderFlap
-          expr: rate(rynxs_leader_transitions_total[5m]) > 0.1
+          expr: increase(rynxs_leader_transitions_total[5m]) > 3
           for: 5m
           labels:
             severity: warning
           annotations:
             summary: "Rynxs operator leader flapping"
-            description: "Leader transitions rate is {{ $value }}/sec."
+            description: "Leader transitions increased by {{ $value }} in 5 minutes."
 
         - alert: RynxsLeaderElectionFailuresHigh
           expr: rate(rynxs_leader_election_failures_total[5m]) > 0.05

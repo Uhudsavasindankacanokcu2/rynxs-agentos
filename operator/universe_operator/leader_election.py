@@ -173,7 +173,7 @@ class LeaderElector:
             except ApiException as ex:
                 if ex.status == 409 and attempt < max_retries - 1:
                     # 409 Conflict: resourceVersion mismatch, retry with fresh lease
-                    backoff = (2 ** attempt) * 0.1 + random.uniform(0, 0.05)  # Exponential + jitter
+                    backoff = (2 ** attempt) * 0.1 + random.uniform(0, 0.2)  # Exponential + jitter (0-200ms)
                     time.sleep(backoff)
                     try:
                         lease = self._api.read_namespaced_lease(self.config.lease_name, self.namespace)
@@ -219,7 +219,7 @@ class LeaderElector:
             except ApiException as ex:
                 if ex.status == 409 and attempt < max_retries - 1:
                     # 409 Conflict: another pod may have taken leadership, retry with fresh lease
-                    backoff = (2 ** attempt) * 0.1 + random.uniform(0, 0.05)  # Exponential + jitter
+                    backoff = (2 ** attempt) * 0.1 + random.uniform(0, 0.2)  # Exponential + jitter (0-200ms)
                     time.sleep(backoff)
                     try:
                         lease = self._api.read_namespaced_lease(self.config.lease_name, self.namespace)

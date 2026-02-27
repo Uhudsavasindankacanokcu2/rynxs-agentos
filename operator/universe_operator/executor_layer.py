@@ -39,7 +39,7 @@ class ExecutorLayer:
     - Event translation (that's in engine_adapter)
     """
 
-    def __init__(self, event_store: EventStore, clock: DeterministicClock, logger):
+    def __init__(self, event_store: EventStore, clock: DeterministicClock, logger, leader_elector=None):
         """
         Initialize executor with event store and K8s clients.
 
@@ -47,10 +47,12 @@ class ExecutorLayer:
             event_store: Event store for logging feedback
             clock: Deterministic clock for event timestamps
             logger: Logger instance
+            leader_elector: LeaderElector instance for post-apply verification (optional)
         """
         self.event_store = event_store
         self.clock = clock
         self.logger = logger
+        self.leader_elector = leader_elector
         self.writer_id = os.getenv("RYNXS_WRITER_ID")
 
         # K8s API clients
@@ -89,6 +91,17 @@ class ExecutorLayer:
             action_uid = action_id(action)
             try:
                 result = self._apply_action(action)
+
+                # Post-apply leader check (E3 post-review: fencing mitigation)
+                # Verify we're still leader AFTER side-effect to detect late leadership loss
+                if self.leader_elector and not self.leader_elector.is_leader():
+                    self.logger.warn(
+                        f"Leadership lost AFTER applying action {action.action_type}. "
+                        "Aborting further actions to prevent split-brain."
+                    )
+                    # Do NOT log ActionApplied event if we lost leadership
+                    # This prevents duplicate events from old leader
+                    break
 
                 # Log success
                 event = Event(

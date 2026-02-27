@@ -7,6 +7,42 @@ image:
 # Replica count (for HA with leader election)
 replicaCount: 1
 
+# PodDisruptionBudget (E3 post-review)
+# Ensures minimum availability during voluntary disruptions (node drains, rolling updates)
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1  # At least 1 pod must be available during disruptions
+  # maxUnavailable: 1  # Alternative: max 1 pod can be unavailable
+
+# Pod scheduling (E3 post-review)
+# Spread pods across nodes/zones to prevent single point of failure
+affinity:
+  podAntiAffinity:
+    # Prefer to schedule pods on different nodes (soft constraint)
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: rynxs
+          topologyKey: kubernetes.io/hostname
+
+# Topology spread constraints (alternative to affinity, more flexible)
+# Uncomment to use instead of affinity
+# topologySpreadConstraints:
+#   - maxSkew: 1
+#     topologyKey: kubernetes.io/hostname
+#     whenUnsatisfiable: ScheduleAnyway  # Soft constraint
+#     labelSelector:
+#       matchLabels:
+#         app.kubernetes.io/name: rynxs
+#   - maxSkew: 1
+#     topologyKey: topology.kubernetes.io/zone
+#     whenUnsatisfiable: ScheduleAnyway
+#     labelSelector:
+#       matchLabels:
+#         app.kubernetes.io/name: rynxs
+
 # Resources
 resources:
   limits:
@@ -105,6 +141,17 @@ metrics:
     labels: {}
     relabelings: []
     metricRelabelings: []
+
+  # NetworkPolicy for metrics endpoint (E3 post-review)
+  # Restricts access to metrics endpoint (HTTP-only) to Prometheus pods
+  networkPolicy:
+    enabled: false  # Disabled by default, enable in production for security
+    # Allow scraping from specific namespace (e.g., monitoring)
+    prometheusNamespaceSelector: {}
+      # name: monitoring
+    # Allow scraping from specific pods (e.g., prometheus)
+    prometheusPodSelector: {}
+      # app: prometheus
 
 # Logging
 logging:
