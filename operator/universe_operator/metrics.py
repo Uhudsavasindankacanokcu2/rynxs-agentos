@@ -48,6 +48,7 @@ CHECKPOINT_CREATE_DURATION: "Histogram" = None  # type: ignore
 CHECKPOINT_VERIFY_FAILURES: "Counter" = None  # type: ignore
 LEADER_ELECTION_FAILURES: "Counter" = None  # type: ignore
 LEADER_TRANSITIONS: "Counter" = None  # type: ignore
+S3_PUT_ERRORS: "Counter" = None  # type: ignore
 
 _metrics_initialized = False
 _metrics_lock = threading.Lock()
@@ -62,7 +63,7 @@ def init_metrics() -> None:
     """
     global EVENTS_TOTAL, RECONCILE_DURATION, LEADER_ELECTION_STATUS
     global REPLAY_DURATION, CHECKPOINT_CREATE_DURATION, CHECKPOINT_VERIFY_FAILURES
-    global LEADER_ELECTION_FAILURES, LEADER_TRANSITIONS
+    global LEADER_ELECTION_FAILURES, LEADER_TRANSITIONS, S3_PUT_ERRORS
     global _metrics_initialized
 
     with _metrics_lock:
@@ -126,6 +127,13 @@ def init_metrics() -> None:
             "rynxs_leader_transitions_total",
             "Total number of leader transitions (acquired or lost leadership)",
             labelnames=["event"],  # "acquired" or "lost"
+        )
+
+        # S3 PutObject error counter (E4.4 - event store errors)
+        S3_PUT_ERRORS = Counter(
+            "rynxs_s3_put_errors_total",
+            "Total number of S3 PutObject errors during event log append",
+            labelnames=["error_type"],  # "AccessDenied", "PreconditionFailed", "NoSuchBucket", "NetworkError"
         )
 
         _metrics_initialized = True

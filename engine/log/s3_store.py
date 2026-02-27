@@ -29,6 +29,12 @@ from ..core.events import Event
 from .integrity import ZERO_HASH, chain_record, hash_event
 from .store import AppendResult, EventStore
 
+# Import metrics for S3 error tracking (optional - graceful degradation if not available)
+try:
+    from operator.universe_operator import metrics
+except ImportError:
+    metrics = None  # type: ignore
+
 
 class S3EventStore(EventStore):
     """
@@ -229,6 +235,24 @@ class S3EventStore(EventStore):
         except (BotoCoreError, json.JSONDecodeError, ValueError, TypeError):
             return
 
+    def _classify_s3_error(self, error_code: str) -> str:
+        """
+        Classify S3 error code into metric label for observability.
+
+        Returns error_type label for rynxs_s3_put_errors_total metric.
+        """
+        # Map S3 error codes to high-level error types
+        if error_code in ("AccessDenied", "403"):
+            return "AccessDenied"  # IAM/bucket policy issue
+        elif error_code in ("PreconditionFailed", "412"):
+            return "PreconditionFailed"  # CAS conflict (If-None-Match)
+        elif error_code in ("NoSuchBucket", "NoSuchKey"):
+            return "NoSuchBucket"  # Bucket misconfiguration
+        elif error_code in ("RequestTimeout", "ServiceUnavailable", "503"):
+            return "NetworkError"  # Network/S3 service issue
+        else:
+            return "Other"  # Catch-all for unknown errors
+
     def _put_event_object(self, key: str, body: str) -> bool:
         """
         Put object only if it does not already exist.
@@ -247,8 +271,14 @@ class S3EventStore(EventStore):
             return True
         except ClientError as e:
             code = e.response.get("Error", {}).get("Code", "")
+
+            # Track S3 errors for observability (E4.4)
+            if metrics and metrics.S3_PUT_ERRORS:
+                error_type = self._classify_s3_error(code)
+                metrics.S3_PUT_ERRORS.labels(error_type=error_type).inc()
+
             if code in ("PreconditionFailed", "412"):
-                return False
+                return False  # Expected during CAS retry (not an error)
             raise
     def append(self, event: Event, expected_prev_hash: Optional[str] = None) -> AppendResult:
         """

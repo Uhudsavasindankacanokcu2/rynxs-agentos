@@ -272,8 +272,13 @@ grep -A50 "Runbook: RynxsEventStoreErrorsHigh" docs/PROMETHEUS_ALERTS.md
 
 ```bash
 # List all IAM principals with s3:PutObject permission on bucket
+# (Robust filter handles both string and array Action formats)
 aws s3api get-bucket-policy --bucket rynxs-events-prod \
-  | jq -r '.Policy | fromjson | .Statement[] | select(.Action | contains("s3:PutObject")) | .Principal'
+  | jq -r '.Policy | fromjson
+    | .Statement[]
+    | select((.Action|type)=="string" and .Action=="s3:PutObject"
+          or (.Action|type)=="array" and (any(.Action[]; .=="s3:PutObject")))
+    | .Principal'
 
 # Expected: Only operator IAM role ARN
 # Example: {"AWS": "arn:aws:iam::123456789012:role/rynxs-operator"}
@@ -384,6 +389,48 @@ kubectl exec -n monitoring prometheus-xxx -- \
 **Pass Criteria**:
 - ✅ All 5 critical alerts loaded in Prometheus
 - ✅ No alerts firing (in healthy steady state)
+
+---
+
+## Ultra-Quick Smoke Test (4-Step)
+
+**Purpose**: Final release gate - verify core functionality in <2 minutes.
+
+```bash
+# Step 1: Exactly 1 leader elected
+kubectl exec -n rynxs deployment/rynxs-operator -- \
+  curl -s http://localhost:8080/metrics | grep rynxs_leader_election_status | awk '{sum+=$2} END {print sum}'
+
+# Expected: 1 (sum across all pods)
+
+# Step 2: S3 has at least 2 events (initial state)
+aws s3 ls s3://rynxs-events-prod/events/ | wc -l
+
+# Expected: ≥2 (0000000000.json, 0000000001.json)
+
+# Step 3: Conditional write enforcement works (2nd write fails)
+KEY="events/smoke-test-$(date +%s).json"
+aws s3api put-object --bucket rynxs-events-prod --key $KEY --body /dev/null --if-none-match '*'
+aws s3api put-object --bucket rynxs-events-prod --key $KEY --body /dev/null --if-none-match '*'
+
+# Expected: First write 200 OK, second write 412 PreconditionFailed
+
+# Step 4: Pods distributed across zones (if multi-zone cluster)
+kubectl get pods -n rynxs -l app.kubernetes.io/name=rynxs \
+  -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' \
+  | xargs -I {} kubectl get node {} -o jsonpath='{.metadata.labels.topology\.kubernetes\.io/zone}{"\n"}' \
+  | sort -u | wc -l
+
+# Expected: ≥2 (pods in at least 2 zones for replicaCount=3)
+```
+
+**Pass Criteria (All 4 must pass)**:
+- ✅ Step 1: sum = 1 (single leader)
+- ✅ Step 2: ≥2 event files in S3
+- ✅ Step 3: Second conditional write returns 412
+- ✅ Step 4: ≥2 unique zones (if multi-zone cluster)
+
+**If any FAIL**: Review corresponding validation section above before proceeding.
 
 ---
 
