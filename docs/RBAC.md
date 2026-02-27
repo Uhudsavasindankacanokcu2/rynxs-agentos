@@ -213,5 +213,37 @@ If additional permissions are needed (e.g., for cleanup, finalizers, status upda
 | persistentvolumeclaims | "" (core) | create, get, list, patch | Agent workspace storage |
 | deployments | apps | create, get, list, patch | Agent pod management |
 | networkpolicies | networking.k8s.io | create, get, list, patch | Agent isolation |
+| leases | coordination.k8s.io | get, list, watch, create, update | Leader election for HA (E3) |
 
-**Total permissions**: 6 resource types, 4-5 verbs each, **0 wildcards**.
+**Total permissions**: 7 resource types, 4-5 verbs each, **0 wildcards**.
+
+### Leader Election (E3)
+
+**Resource**: `leases`
+**API Group**: `coordination.k8s.io`
+**Verbs**: `get`, `list`, `watch`, `create`, `update`
+
+```yaml
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update"]
+```
+
+**Why these permissions?**
+- `get`: Read current lease state to check holder identity
+- `list`, `watch`: Not strictly required for single lease, but standard practice for leader election patterns
+- `create`: Create lease if it doesn't exist (first leader)
+- `update`: Renew lease (existing leader) or takeover (new leader on failover)
+
+**Why no `patch`?**
+- `update` (PUT) is preferred over `patch` for lease renewal to avoid partial update semantics
+- Lease spec is small, full replacement is simpler and more deterministic
+
+**Why no `delete`?**
+- Leases expire naturally after `leaseDurationSeconds`
+- Deleting leases can cause unnecessary leader churn
+- Operator should release leadership by not renewing, not by deleting
+
+**Reference**: [Kubernetes Leader Election](https://kubernetes.io/blog/2016/01/simple-leader-election-with-kubernetes/)
+
+**Split-brain protection**: Lease-based leader election does not provide fencing guarantees. The operator must stop reconciliation immediately upon losing leadership (implemented in `_require_leader()` check).

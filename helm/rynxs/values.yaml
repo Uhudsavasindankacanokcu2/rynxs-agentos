@@ -38,9 +38,9 @@ persistence:
 # Leader Election (E3)
 leaderElection:
   enabled: false
-  leaseDuration: 15s
-  renewDeadline: 10s
-  retryPeriod: 2s
+  leaseDurationSeconds: 30  # How long non-leader will wait to takeover
+  renewDeadlineSeconds: 20  # Leader must renew within this window
+  retryPeriodSeconds: 5     # Check interval for leadership
 
 # Log Sink (E2)
 logSink:

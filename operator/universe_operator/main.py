@@ -98,11 +98,41 @@ def _startup(settings: kopf.OperatorSettings, **_):
     metrics_port = int(os.getenv("METRICS_PORT", "8080"))
     start_metrics_server(enabled=metrics_enabled, port=metrics_port)
 
+    # Start leader election loop (E3)
+    if leader_elector.is_enabled():
+        import threading
+        from .metrics import set_leader_status
+
+        def leader_election_loop():
+            logger = get_logger(__name__)
+            while True:
+                try:
+                    is_leader = leader_elector.ensure_leader()
+                    set_leader_status(is_leader)
+                    if is_leader:
+                        logger.debug("Leader status: LEADER")
+                    else:
+                        logger.debug("Leader status: FOLLOWER")
+                except Exception as e:
+                    logger.error(f"Leader election error: {e}")
+                    set_leader_status(False)
+
+                import time
+                time.sleep(leader_elector.config.retry_period_seconds)
+
+        thread = threading.Thread(target=leader_election_loop, daemon=True, name="LeaderElection")
+        thread.start()
+        logger = get_logger(__name__)
+        logger.info("Leader election loop started", extra={
+            "lease_name": leader_elector.config.lease_name,
+            "namespace": leader_elector.namespace,
+        })
+
     logger = get_logger(__name__)
     logger.info("Operator startup complete", extra={
         "metrics_enabled": metrics_enabled,
         "metrics_port": metrics_port,
-        "event_store_path": event_store_path,
+        "leader_election_enabled": leader_elector.is_enabled(),
     })
 
 @kopf.on.create('universe.ai', 'v1alpha1', 'agents')

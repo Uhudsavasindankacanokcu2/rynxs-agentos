@@ -29,4 +29,10 @@ rules:
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
     verbs: ["create", "get", "list", "patch"]
+
+  # ---- Leader Election (E3) ----
+  # Lease objects for HA coordination
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update"]
 {{- end -}}

@@ -65,20 +65,74 @@ See [values.yaml](values.yaml) for full configuration options.
 
 ### Examples
 
-#### High Availability Deployment
+#### High Availability Deployment (Leader Election)
+
+**Important**: HA requires S3 storage (not file-based PVC). Use MinIO or external S3.
 
 ```yaml
 # ha-values.yaml
 replicaCount: 3
+
+# Leader Election (E3)
 leaderElection:
   enabled: true
-  leaseDuration: 15s
-  renewDeadline: 10s
-  retryPeriod: 2s
+  leaseDurationSeconds: 30  # Lease expiration time
+  renewDeadlineSeconds: 20  # Leader must renew within this window
+  retryPeriodSeconds: 5     # Check interval
+
+# MinIO + S3 storage (required for HA)
+minio:
+  enabled: true
+
+logSink:
+  type: s3
+  s3:
+    bucket: "rynxs-events"
+    accessKeySecret: "rynxs-s3-credentials"
+
+# Enable metrics to monitor leader status
+metrics:
+  enabled: true
 ```
 
 ```bash
-helm install rynxs ./helm/rynxs --values ha-values.yaml
+# Create S3 credentials
+kubectl create secret generic rynxs-s3-credentials \
+  --from-literal=AWS_ACCESS_KEY_ID=minioadmin \
+  --from-literal=AWS_SECRET_ACCESS_KEY=minioadmin \
+  --namespace rynxs
+
+# Install with HA
+helm install rynxs ./helm/rynxs --values ha-values.yaml --namespace rynxs --create-namespace
+
+# Verify leader election
+kubectl get pods -n rynxs -l app.kubernetes.io/name=rynxs
+kubectl logs -n rynxs -l app.kubernetes.io/name=rynxs --tail=20 | grep -i leader
+
+# Check leader status via metrics
+kubectl port-forward -n rynxs svc/rynxs-metrics 8080:8080
+curl http://localhost:8080/metrics | grep rynxs_leader_election_status
+# Expected: 1 pod with value=1 (leader), others with value=0 (followers)
+```
+
+**Leader Election Behavior**:
+- **Lease-based**: Uses Kubernetes Lease objects (coordination.k8s.io)
+- **Automatic failover**: If leader pod crashes, new leader elected within `leaseDurationSeconds`
+- **Split-brain protection**: Only 1 active leader at a time (follower pods skip reconciliation)
+- **Hash chain continuity**: S3 append-only semantics + `expected_prev_hash` prevent duplicate events
+
+**Testing HA Failover**:
+```bash
+# Run automated failover test
+chmod +x scripts/e2e-ha-failover.sh
+./scripts/e2e-ha-failover.sh
+
+# Manual failover test
+LEADER_POD=$(kubectl get pod -n rynxs -l app.kubernetes.io/name=rynxs -o json | jq -r '.items[] | select(.metadata.name | test("rynxs")) | .metadata.name' | head -1)
+kubectl delete pod -n rynxs $LEADER_POD
+
+# Wait 10-15s, new leader should be elected
+kubectl logs -n rynxs -l app.kubernetes.io/name=rynxs --tail=20 | grep "Leader status: LEADER"
 ```
 
 #### S3 Remote Storage

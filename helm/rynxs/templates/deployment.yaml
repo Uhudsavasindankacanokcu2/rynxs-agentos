@@ -83,15 +83,25 @@ spec:
             {{- end }}
             {{- end }}
 
-            # Leader election (E3 prep)
-            - name: LEADER_ELECTION_ENABLED
-              value: {{ ternary "true" "false" .Values.leaderElection.enabled | quote }}
-            - name: LEADER_ELECTION_LEASE_DURATION
-              value: {{ .Values.leaderElection.leaseDuration | quote }}
-            - name: LEADER_ELECTION_RENEW_DEADLINE
-              value: {{ .Values.leaderElection.renewDeadline | quote }}
-            - name: LEADER_ELECTION_RETRY_PERIOD
-              value: {{ .Values.leaderElection.retryPeriod | quote }}
+            # Leader election (E3)
+            - name: RYNXS_LEADER_ELECTION_ENABLED
+              value: {{ ternary "1" "0" .Values.leaderElection.enabled | quote }}
+            - name: RYNXS_LEASE_NAME
+              value: {{ include "rynxs.fullname" . }}-leader
+            - name: RYNXS_LEASE_DURATION_SECONDS
+              value: {{ .Values.leaderElection.leaseDurationSeconds | default 30 | quote }}
+            - name: RYNXS_RENEW_DEADLINE_SECONDS
+              value: {{ .Values.leaderElection.renewDeadlineSeconds | default 20 | quote }}
+            - name: RYNXS_RETRY_PERIOD_SECONDS
+              value: {{ .Values.leaderElection.retryPeriodSeconds | default 5 | quote }}
+            - name: RYNXS_OPERATOR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
 
             # Metrics (E4 prep)
             - name: METRICS_ENABLED
