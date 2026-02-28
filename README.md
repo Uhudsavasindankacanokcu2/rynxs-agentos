@@ -42,12 +42,12 @@ If your team needs agents to operate with real capabilities **without losing con
 # Install with default configuration
 helm install rynxs ./helm/rynxs
 
-# Production deployment with HA
-helm install rynxs ./helm/rynxs -f helm/rynxs/values-production.yaml
+# Production deployment with HA (recommended)
+helm install rynxs ./helm/rynxs -n rynxs --create-namespace -f helm/rynxs/values-production.yaml
 
 # Verify installation
-kubectl get pods -l app.kubernetes.io/name=rynxs
-kubectl logs -l app.kubernetes.io/name=rynxs
+kubectl get pods -n rynxs -l app.kubernetes.io/name=rynxs
+kubectl logs -n rynxs -l app.kubernetes.io/name=rynxs
 ```
 
 See `docs/PRODUCTION_CHECKLIST.md` for full go-live validation.
@@ -86,27 +86,28 @@ kubectl get jobs | grep sandbox-shell
 
 ## Production Readiness
 
-### What this timeline proves
-Rynxs evolved from a single-node operator prototype into a **production-ready Kubernetes platform package** with:
-- **One-command deployment** (Helm)
-- **HA execution model** (multi-replica + leader election + failover)
-- **Durable audit/event log** (S3 append-only + hash-chain integrity)
-- **Operational visibility** (metrics, alerts, runbooks)
-- **Controlled risk posture** (mitigations + observability + forensic traceability)
+Rynxs has been hardened and validated for **production deployment** with a focus on **HA, durability, observability, and controlled risk**.
+This repo includes an operator Helm chart, S3-backed event log, leader election, alerts/runbooks, and a go-live checklist.
 
-### Start here (go-live)
-If you're deploying to production, follow the go-live gate:
-- **`docs/PRODUCTION_CHECKLIST.md`** — 10-step validation + <2 min smoke test
+### What this proves (in plain terms)
 
-### Full timeline
-For the complete evolution story (E1 → E4 → E2 → E3 → Hardening):
-- **`docs/MILESTONE_CHANGELOG.md`**
+- **Deployable**: single-command installs via Helm (no manual YAML orchestration).
+- **HA (High Availability)**: multi-replica operator with Kubernetes Lease leader election + failover validation.
+- **Durable state**: append-only event log in **S3/MinIO**, with hash-chain integrity checks.
+- **Observable operations**: Prometheus metrics + critical alerts + runbooks for incident response.
+- **Controlled risk posture**: no "magic guarantees"; split-brain is **mitigated** and **forensically analyzable**.
 
-### Key docs
-- `docs/EXECUTIVE_SUMMARY.md` — technical executive overview
-- `docs/PROMETHEUS_ALERTS.md` — alerts + runbooks
-- `docs/S3_BUCKET_POLICY.md` — S3 conditional write enforcement
-- `docs/RELEASE_NOTES.md` / `docs/RELEASE_SIGNOFF.md` — release & ops sign-off
+### Start here (Go-live)
+
+- **Go-live gate / validation checklist:** `docs/PRODUCTION_CHECKLIST.md`
+- **Alerts + runbooks:** `docs/PROMETHEUS_ALERTS.md`
+- **S3 conditional write enforcement:** `docs/S3_BUCKET_POLICY.md`
+
+### Timeline (how we got here)
+
+- **Milestone changelog:** `docs/MILESTONE_CHANGELOG.md`
+- **Exec summary:** `docs/EXECUTIVE_SUMMARY.md`
+- **Release notes & sign-off:** `docs/RELEASE_NOTES.md`, `docs/RELEASE_SIGNOFF.md`
 
 ---
 
@@ -121,7 +122,9 @@ Rynxs uses a Kubernetes operator pattern with event-sourced state management:
 - S3/MinIO durable storage with hash-chain integrity
 
 **Execution Plane**
-- Agent runtime with workspace + audit trail
+- Agent runtime with workspace + dual audit trail:
+  - Workspace-level traces (`/workspace/audit.jsonl`)
+  - S3-backed event log (hash-chained, for HA and forensic integrity)
 - Sandboxed jobs for shell/browser execution
 - Default-deny networking (NetworkPolicy)
 - Optional gVisor/Kata runtime isolation
