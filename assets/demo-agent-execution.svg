@@ -39,6 +39,4 @@
   <text class="terminal output" x="30" y="445">  "tool": "sandbox_job", "output_hash": "sha256:a1b2c3...",</text>
   <text class="terminal output" x="30" y="465">  "event_hash": "d4e5f6...", "prev_hash": "c7d8e9..."</text>
   <text class="terminal output" x="20" y="485">}</text>
-
-  <rect class="cursor" x="480" y="397" width="8" height="14"/>
 </svg>

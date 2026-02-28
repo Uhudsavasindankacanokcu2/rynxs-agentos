@@ -35,6 +35,4 @@
   <text class="terminal success" x="20" y="375">rynxs-operator-7f8b9c5d4-kw9ft node-us-east-1c</text>
 
   <text class="terminal warning" x="20" y="415">✓ Production validation PASSED (10/10 checks)</text>
-
-  <rect class="cursor" x="530" y="287" width="8" height="14"/>
 </svg>

@@ -32,6 +32,4 @@
   <text class="terminal output" x="20" y="330">rynxs-operator-7f8b9c5d4-2xk7n   1/1     Running   10s</text>
   <text class="terminal output" x="20" y="350">rynxs-operator-7f8b9c5d4-8plmq   1/1     Running   10s</text>
   <text class="terminal output" x="20" y="370">rynxs-operator-7f8b9c5d4-kw9ft   1/1     Running   10s</text>
-
-  <rect class="cursor" x="40" y="275" width="10" height="16"/>
 </svg>
