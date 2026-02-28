@@ -27,3 +27,13 @@
 - **HA you can trust:** single-writer best-effort via Lease + deterministic sequencing + S3 durability
 - **Operate confidently:** runbooks, alerts, structured logs, and clear deploy/verify gates
 - **Ship fast:** Helm install/upgrade workflows with production checklist and smoke test
+
+---
+
+## Option D — Ultra-short (sponsors header, minimal)
+
+**Tagline:** Governed AI computers on Kubernetes.
+
+- **Tamper-evident audit log**
+- **Production HA + failover**
+- **Complete observability**
