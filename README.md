@@ -104,6 +104,32 @@ Rynxs implements the following security defaults for all workloads:
 
 ---
 
+## Production Readiness
+
+### What this timeline proves
+Rynxs evolved from a single-node operator prototype into a **production-ready Kubernetes platform package** with:
+- **One-command deployment** (Helm)
+- **HA execution model** (multi-replica + leader election + failover)
+- **Durable audit/event log** (S3 append-only + hash-chain integrity)
+- **Operational visibility** (metrics, alerts, runbooks)
+- **Controlled risk posture** (mitigations + observability + forensic traceability)
+
+### Start here (go-live)
+If you're deploying to production, follow the go-live gate:
+- **`docs/PRODUCTION_CHECKLIST.md`** — 10-step validation + <2 min smoke test
+
+### Full timeline
+For the complete evolution story (E1 → E4 → E2 → E3 → Hardening):
+- **`docs/MILESTONE_CHANGELOG.md`**
+
+### Key docs
+- `docs/EXECUTIVE_SUMMARY.md` — technical executive overview
+- `docs/PROMETHEUS_ALERTS.md` — alerts + runbooks
+- `docs/S3_BUCKET_POLICY.md` — S3 conditional write enforcement
+- `docs/RELEASE_NOTES.md` / `docs/RELEASE_SIGNOFF.md` — release & ops sign-off
+
+---
+
 ## Roadmap
 
 - **Multi-Channel Gateway**: WebSocket and API integration for external triggers (Slack, Telegram, Web).
