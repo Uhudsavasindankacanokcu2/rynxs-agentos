@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500">
+  <style>
+    .terminal { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 13px; }
+    .prompt { fill: #5f87af; }
+    .command { fill: #d7d7d7; }
+    .output { fill: #87af87; }
+    .success { fill: #87d787; }
+    .info { fill: #5fafd7; }
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+    .cursor { animation: blink 1s infinite; fill: #d7d7d7; }
+  </style>
+
+  <rect width="900" height="500" fill="#1e1e1e"/>
+
+  <text class="terminal info" x="20" y="25"># Create an agent with governed workspace</text>
+  <text class="terminal prompt" x="20" y="50">$</text>
+  <text class="terminal command" x="40" y="50">kubectl apply -f examples/agent-sandbox.yaml</text>
+  <text class="terminal success" x="20" y="75">agent.universe.ai/my-agent created</text>
+
+  <text class="terminal prompt" x="20" y="115">$</text>
+  <text class="terminal command" x="40" y="115">kubectl get pods -l app=universe-agent</text>
+  <text class="terminal output" x="20" y="140">NAME              READY   STATUS    AGE</text>
+  <text class="terminal output" x="20" y="160">my-agent-0        1/1     Running   5s</text>
+
+  <text class="terminal info" x="20" y="200"># Send task to agent workspace</text>
+  <text class="terminal prompt" x="20" y="225">$</text>
+  <text class="terminal command" x="40" y="225">kubectl exec my-agent-0 -- sh -c 'echo "{\"text\":\"run uname -a\"}" >> /workspace/inbox.jsonl'</text>
+
+  <text class="terminal info" x="20" y="265"># Agent creates sandboxed job automatically</text>
+  <text class="terminal prompt" x="20" y="290">$</text>
+  <text class="terminal command" x="40" y="290">kubectl get jobs</text>
+  <text class="terminal output" x="20" y="315">NAME                          COMPLETIONS   AGE</text>
+  <text class="terminal success" x="20" y="335">sandbox-shell-my-agent-x7k2   1/1           2s</text>
+
+  <text class="terminal info" x="20" y="375"># Verify audit trail (hash-chained, tamper-evident)</text>
+  <text class="terminal prompt" x="20" y="400">$</text>
+  <text class="terminal command" x="40" y="400">kubectl exec my-agent-0 -- tail -1 /workspace/audit.jsonl | jq</text>
+  <text class="terminal output" x="20" y="425">{</text>
+  <text class="terminal output" x="30" y="445">  "tool": "sandbox_job", "output_hash": "sha256:a1b2c3...",</text>
+  <text class="terminal output" x="30" y="465">  "event_hash": "d4e5f6...", "prev_hash": "c7d8e9..."</text>
+  <text class="terminal output" x="20" y="485">}</text>
+
+  <rect class="cursor" x="480" y="397" width="8" height="14"/>
+</svg>

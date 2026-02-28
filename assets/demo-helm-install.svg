@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <style>
+    .terminal { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 14px; }
+    .prompt { fill: #5f87af; }
+    .command { fill: #d7d7d7; }
+    .output { fill: #87af87; }
+    .comment { fill: #808080; }
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+    .cursor { animation: blink 1s infinite; fill: #d7d7d7; }
+  </style>
+
+  <rect width="800" height="400" fill="#1e1e1e"/>
+
+  <text class="terminal prompt" x="20" y="30">$</text>
+  <text class="terminal command" x="40" y="30">helm install rynxs ./helm/rynxs -n rynxs --create-namespace</text>
+
+  <text class="terminal output" x="20" y="60">NAME: rynxs</text>
+  <text class="terminal output" x="20" y="80">LAST DEPLOYED: Fri Feb 28 12:00:00 2026</text>
+  <text class="terminal output" x="20" y="100">NAMESPACE: rynxs</text>
+  <text class="terminal output" x="20" y="120">STATUS: deployed</text>
+  <text class="terminal output" x="20" y="140">REVISION: 1</text>
+
+  <text class="terminal comment" x="20" y="180">✓ CRDs installed</text>
+  <text class="terminal comment" x="20" y="200">✓ Operator deployed (3 replicas)</text>
+  <text class="terminal comment" x="20" y="220">✓ Leader election configured</text>
+  <text class="terminal comment" x="20" y="240">✓ S3 event store ready</text>
+
+  <text class="terminal prompt" x="20" y="280">$</text>
+  <text class="terminal command" x="40" y="280">kubectl get pods -n rynxs</text>
+
+  <text class="terminal output" x="20" y="310">NAME                              READY   STATUS    AGE</text>
+  <text class="terminal output" x="20" y="330">rynxs-operator-7f8b9c5d4-2xk7n   1/1     Running   10s</text>
+  <text class="terminal output" x="20" y="350">rynxs-operator-7f8b9c5d4-8plmq   1/1     Running   10s</text>
+  <text class="terminal output" x="20" y="370">rynxs-operator-7f8b9c5d4-kw9ft   1/1     Running   10s</text>
+
+  <rect class="cursor" x="40" y="275" width="10" height="16"/>
+</svg>

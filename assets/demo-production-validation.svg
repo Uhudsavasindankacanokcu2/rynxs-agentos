@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 950 450">
+  <style>
+    .terminal { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 13px; }
+    .prompt { fill: #5f87af; }
+    .command { fill: #d7d7d7; }
+    .output { fill: #87af87; }
+    .success { fill: #87d787; }
+    .warning { fill: #d7af5f; }
+    .info { fill: #5fafd7; }
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+    .cursor { animation: blink 1s infinite; fill: #d7d7d7; }
+  </style>
+
+  <rect width="950" height="450" fill="#1e1e1e"/>
+
+  <text class="terminal info" x="20" y="25"># Production HA validation - check leader election</text>
+  <text class="terminal prompt" x="20" y="50">$</text>
+  <text class="terminal command" x="40" y="50">kubectl exec deployment/rynxs-operator -- curl -s localhost:8080/metrics | grep leader</text>
+  <text class="terminal success" x="20" y="75">rynxs_leader_election_status{} 1</text>
+  <text class="terminal output" x="20" y="95">rynxs_leader_transitions_total{event="acquired"} 1</text>
+
+  <text class="terminal info" x="20" y="135"># Verify S3 event log integrity</text>
+  <text class="terminal prompt" x="20" y="160">$</text>
+  <text class="terminal command" x="40" y="160">aws s3 ls s3://rynxs-events-prod/events/ | tail -3</text>
+  <text class="terminal output" x="20" y="185">2026-02-28 12:00:01    1247 0000000042.json</text>
+  <text class="terminal output" x="20" y="205">2026-02-28 12:00:02    1189 0000000043.json</text>
+  <text class="terminal success" x="20" y="225">2026-02-28 12:00:03    1302 0000000044.json  ← Hash-chain validated</text>
+
+  <text class="terminal info" x="20" y="265"># Check topology spread (multi-zone HA)</text>
+  <text class="terminal prompt" x="20" y="290">$</text>
+  <text class="terminal command" x="40" y="290">kubectl get pods -n rynxs -o wide | awk '{print $1, $7}'</text>
+  <text class="terminal output" x="20" y="315">NAME                           NODE</text>
+  <text class="terminal success" x="20" y="335">rynxs-operator-7f8b9c5d4-2xk7n node-us-east-1a</text>
+  <text class="terminal success" x="20" y="355">rynxs-operator-7f8b9c5d4-8plmq node-us-east-1b</text>
+  <text class="terminal success" x="20" y="375">rynxs-operator-7f8b9c5d4-kw9ft node-us-east-1c</text>
+
+  <text class="terminal warning" x="20" y="415">✓ Production validation PASSED (10/10 checks)</text>
+
+  <rect class="cursor" x="530" y="287" width="8" height="14"/>
+</svg>
