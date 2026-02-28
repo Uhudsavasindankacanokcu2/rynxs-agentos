@@ -1,106 +1,86 @@
-## Branch guide
-
-- main: full Kubernetes architecture (operator + sandbox + policy enforcement)
-- proof-lite: minimal deterministic runtime (no external dependencies)
-- production-arch: enterprise sandbox development lane (gVisor/Kata, policy packs, signed images, immutable audit)
-
 <p align="center">
   <img src="assets/official-banner.jpg" width="800" alt="Rynxs Official Banner">
 </p>
 
-# Rynxs: Policy-Enforced Multi-AI Worker and "AI Computers" Platform on Kubernetes
+# Rynxs — Governed AI Computers on Kubernetes
 
-Rynxs is a Kubernetes-native platform designed to orchestrate large-scale AI agents by providing them with "AI Computers"—controlled workspaces, tools, and sandboxed execution environments—governed by strict policy enforcement and deterministic control loops.
+Rynxs is a Kubernetes-native platform for running **governed "AI computers"** — agents with real tools (workspace, shell, browser) but with **auditability, safety, and operational control**.
 
-Rather than a simple multi-worker queue, Rynxs treats agent behavior as a governable resource, leveraging the Kubernetes operator pattern to reconcile desired safety states with actual agent execution.
+In the last release cycle we shipped: **one-command Helm deploy**, **HA leader election + failover**, **S3/MinIO append-only event log with hash-chain integrity**, and **production-grade observability** (Prometheus metrics, alerts, runbooks, structured JSON logs).
 
----
+This isn't "magic guarantees" — it's **mitigated, observable, and forensically analyzable** reliability, aligned with distributed systems reality.
 
-## Technical Pillars
-
-- **Policy-Enforced AI Computers**: Agents operate within a strictly governed environment including filesystems, shells, and network access.
-- **Sandboxed Execution**: High-risk tools (e.g., shell commands) are executed as isolated Kubernetes Jobs, preventing host-level access and ensuring run-to-completion semantics.
-- **Default-Deny Egress**: L3/L4 network isolation via NetworkPolicy (requires CNI enforcement) ensure agents only communicate with approved endpoints.
-- **Deterministic Proof (The Universe Model)**: Core dynamics like social sharding, zonal physics jitter, and health-based sleep cycles are reconciled through a deterministic control plane.
-- **Immutable Audit Trail**: Every tool invocation is recorded in an append-only `/workspace/audit.jsonl` with hashed arguments and outputs for cryptographic verification.
+If your team needs agents to operate with real capabilities **without losing control**, Rynxs is built for that.
 
 ---
 
-## High-Level Architecture
+## Key Capabilities
 
-### Control Plane (Management)
-- **Operator (CRD + Reconciler)**: Watches `Agent` and `Universe` CRDs to automatically provision Deployments, PVCs, RBAC roles, and NetworkPolicies.
-- **Management API/UI**: Interface for policy definition, tenant isolation, and fleet rollouts.
-
-### Data Plane (Execution)
-- **Agent Runtime**: The core loop managing tool invocation, policy checks, and workspace management.
-- **Sandbox Jobs**: Hardened, short-lived Jobs for shell/browser execution with automated TTL cleanup.
-- **Model Ingress**: Support for local or cloud-based inference endpoints (OAI-compat).
-
-### State Layer
-- **Workspace (PVC)**: Persistent local storage for agent files and [audit traces](docs/audit.md).
-- **Deterministic Memory**: Implementation of RAM (volatile), Volume (persistent), and Bucket (atomic snapshots) [invariants](docs/universe-model.md).
+- **One-command deployment** — Helm chart with production defaults, least-privilege RBAC, and documented lifecycle
+- **High availability** — Multi-replica operator with Kubernetes Lease leader election and tested failover
+- **Durable event log** — S3/MinIO append-only storage with hash-chain integrity and tamper detection
+- **Policy enforcement** — Default-deny networking, sandboxed execution (gVisor/Kata support), immutable audit trail
+- **Production observability** — Prometheus metrics, critical alerts with runbooks, structured JSON logs
+- **Controlled risk posture** — Split-brain mitigations, forensic fencing tokens, and go-live checklists
 
 ---
 
-## Quickstart (3-minute proof)
+## Branch Guide
 
-### 1) Install CRDs + base stack
+- **main**: Full Kubernetes architecture (operator + sandbox + policy enforcement)
+- **evo/deterministic-engine-v2**: Production hardening branch (HA + S3 + observability) — **SHIP READY**
+- **proof-lite**: Minimal deterministic runtime (no external dependencies)
+- **production-arch**: Enterprise sandbox development lane (gVisor/Kata, policy packs, signed images)
+
+---
+
+## Quick Start
+
+### Production deployment (Helm)
+
 ```bash
+# Install with default configuration
+helm install rynxs ./helm/rynxs
+
+# Production deployment with HA
+helm install rynxs ./helm/rynxs -f helm/rynxs/values-production.yaml
+
+# Verify installation
+kubectl get pods -l app.kubernetes.io/name=rynxs
+kubectl logs -l app.kubernetes.io/name=rynxs
+```
+
+See `docs/PRODUCTION_CHECKLIST.md` for full go-live validation.
+
+### Development quickstart (Kustomize)
+
+```bash
+# Install CRDs + operator
 kubectl apply -f crds/
 kubectl apply -k deploy/kustomize/base
-kubectl apply -f docs/examples/universe.yaml
+
+# Create test agent
 kubectl apply -f docs/examples/agent.yaml
+
+# Watch operator logs
+kubectl logs -f -l app=rynxs-operator
 ```
 
-### CLI Quickstart (Determinism Toolchain)
-```bash
-scripts/engine_cli.sh inspect --log /var/log/rynxs/operator-events.log
-scripts/engine_cli.sh audit_report --log /var/log/rynxs/operator-events.log --format json
-scripts/determinism_gate.sh
-```
-
-See `docs/CLI.md` for full usage and examples.
-
-### 2) Find the agent pod (namespace-agnostic)
+### Verify agent execution
 
 ```bash
-POD=$(kubectl get pods -A -l app=universe-agent -o jsonpath='{.items[0].metadata.name}')
-NS=$(kubectl get pods -A -l app=universe-agent -o jsonpath='{.items[0].metadata.namespace}')
-echo "Agent pod: $NS/$POD"
+# Find agent pod
+POD=$(kubectl get pods -l app=universe-agent -o jsonpath='{.items[0].metadata.name}')
+
+# Send task
+kubectl exec $POD -- sh -c 'echo "{\"text\":\"run uname -a\"}" >> /workspace/inbox.jsonl'
+
+# Check audit trail
+kubectl exec $POD -- tail /workspace/audit.jsonl
+
+# Verify sandbox job created
+kubectl get jobs | grep sandbox-shell
 ```
-
-### 3) Send a task (via workspace inbox)
-
-```bash
-kubectl exec -n "$NS" "$POD" -- sh -lc 'echo "{\"text\":\"run uname -a in sandbox\"}" >> /workspace/inbox.jsonl'
-kubectl logs -n "$NS" "$POD" -f
-```
-
-### 4) Proof: sandbox job + audit + outbox
-
-```bash
-kubectl get jobs -n "$NS" | grep sandbox-shell || true
-kubectl exec -n "$NS" "$POD" -- sh -lc 'tail -n 3 /workspace/audit.jsonl'
-kubectl exec -n "$NS" "$POD" -- sh -lc 'tail -n 1 /workspace/outbox.jsonl | head -c 800 && echo'
-```
-
-**Expected Results:**
-- A Job named `sandbox-shell-<agent>-<suffix>` appears.
-- `audit.jsonl` contains a `sandbox_job` reference with SHA-256 tool metadata.
-- `outbox.jsonl` contains the verified execution output.
-
----
-
-## Safety and Compliance Baseline
-
-Rynxs implements the following security defaults for all workloads:
-- `runAsNonRoot`: Containers never run as root.
-- `readOnlyRootFilesystem`: Agent root is immutable.
-- `allowPrivilegeEscalation: false`: Limits the attack surface for container breakout.
-- `drop: ["ALL"]`: Minimum capability set.
-- `RuntimeClass`: Recommended support for [gVisor](https://gvisor.dev/docs/user_guide/quick_start/kubernetes/) or [Kata](https://katacontainers.io/) for stronger isolation.
-- `Pod Security Admission`: Namespace-level enforcement of [baseline/restricted profiles](https://kubernetes.io/docs/concepts/security/pod-security-standards/).
 
 ---
 
@@ -130,21 +110,55 @@ For the complete evolution story (E1 → E4 → E2 → E3 → Hardening):
 
 ---
 
-## Roadmap
+## Architecture
 
-- **Multi-Channel Gateway**: WebSocket and API integration for external triggers (Slack, Telegram, Web).
-- **Advanced Sandbox Hardening**: Built-in support for gVisor/Kata profiles and automated NetworkPolicy generation.
-- **Phase 3 (Travel)**: Cross-universe travel sessions with filtered memory bridging.
-- **SIEM Integration**: Automated audit ingestion via OTel or Fluent Bit for immutable storage.
+Rynxs uses a Kubernetes operator pattern with event-sourced state management:
+
+**Control Plane**
+- Operator watches `Agent` and `Universe` CRDs
+- Event-sourced reconciliation with append-only log
+- Leader election for HA (Kubernetes Lease)
+- S3/MinIO durable storage with hash-chain integrity
+
+**Execution Plane**
+- Agent runtime with workspace + audit trail
+- Sandboxed jobs for shell/browser execution
+- Default-deny networking (NetworkPolicy)
+- Optional gVisor/Kata runtime isolation
+
+**Security Defaults**
+- Non-root containers (`runAsNonRoot: true`)
+- Read-only root filesystem
+- No privilege escalation
+- Minimal capabilities (`drop: ["ALL"]`)
+- Pod Security Admission (baseline/restricted)
+
+See `docs/MILESTONE_CHANGELOG.md` for detailed evolution timeline.
 
 ---
 
-## References
+## Documentation
 
-- [Kubernetes Operator Pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
-- [Sandboxed Runtimes (gVisor)](https://gvisor.dev/docs/user_guide/quick_start/kubernetes/)
-- [Job TTL Cleanup](https://kubernetes.io/docs/concepts/workloads/controllers/ttlafterfinished/)
-- [Network Isolation via NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
+**Getting Started**
+- `docs/PRODUCTION_CHECKLIST.md` - Go-live validation (10 steps + 2 min smoke test)
+- `docs/MILESTONE_CHANGELOG.md` - Production readiness timeline (E1→E4→E2→E3→Hardening)
+- `helm/rynxs/README.md` - Helm chart usage and configuration
+
+**Operations**
+- `docs/PROMETHEUS_ALERTS.md` - Alerts and runbooks
+- `docs/S3_BUCKET_POLICY.md` - S3 conditional write enforcement
+- `docs/RBAC.md` - RBAC permissions documentation
+
+**Release**
+- `docs/RELEASE_NOTES.md` - Public release notes
+- `docs/RELEASE_SIGNOFF.md` - Internal ops sign-off
+- `docs/EXECUTIVE_SUMMARY.md` - Technical executive overview
+
+---
+
+## Contributing
+
+See `CONTRIBUTING.md` for development workflow and guidelines.
 
 ---
 
