@@ -15,7 +15,7 @@ All production hardening items are complete and verified. No open blockers remai
 3. MinIO supply-chain hardening (pinned tag + `existingSecret`)
 4. PDB conditional rendering verified
 5. Fencing tokens clarified as forensic markers (non-enforcing)
-6. EventStoreError alert + runbook shipped (`rynxs_s3_put_errors_total` metric)
+6. EventStoreError alert + runbook shipped (powered by `rynxs_s3_put_errors_total{error_type="..."}`)
 7. Production checklist shipped (10-step validation + <2 min smoke test)
 8. CRITICAL: alert metric drift fixed (`rynxs_s3_put_errors_total` exported + error classification)
 
@@ -24,14 +24,15 @@ All production hardening items are complete and verified. No open blockers remai
 - `bc05282` — Production hardening bundle
 - `58cf23c` — Production checklist
 - `9c18be1` — CRITICAL: metric drift fix + S3 error tracking + smoke tests
+- `a94a408` — Release documentation (notes + sign-off)
 
 ## Go-live Gate (from checklist)
 
-- Pre-deploy validation: 10 checks (S3 policy, topology, MinIO, PDB, fencing, alerts)
-- Post-deploy verification: 5 checks (leader election, S3 write test, Prometheus alerts)
+- Pre-deploy validation: 10 checks
+- Post-deploy verification: 5 checks
 - Smoke test: 4 steps (<2 minutes)
 
-All gates documented in `docs/PRODUCTION_CHECKLIST.md`.
+All gates are documented in `docs/PRODUCTION_CHECKLIST.md`.
 
 ## Risk Statement
 
