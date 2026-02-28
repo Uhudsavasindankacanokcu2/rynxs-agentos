@@ -3,6 +3,8 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.24+-326CE5?logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 [![Production Ready](https://img.shields.io/badge/Production-Ready-success)](docs/PRODUCTION_CHECKLIST.md)
+[![CI Status](https://img.shields.io/badge/CI-In_Progress-yellow)](https://github.com/Uhudsavasindankacanokcu2/rynxs-agentos/actions)
+[![Release](https://img.shields.io/badge/Release-v0.1.0-blue)](https://github.com/Uhudsavasindankacanokcu2/rynxs-agentos/releases)
 
 > **Production-ready Kubernetes platform for running governed "AI computers"** — agents with real capabilities (workspace, shell, browser) but with auditability, safety, and operational control.
 
@@ -12,19 +14,47 @@ This isn't "magic guarantees" — it's **mitigated, observable, and forensically
 
 ---
 
-## Quick Install (60 seconds)
+## Getting Started: Choose Your Path
+
+Rynxs offers two deployment paths depending on your goal:
+
+### 🚀 Production Deployment (Helm) — **RECOMMENDED**
+
+**Use this if:** You're deploying to production or need HA, durability, and operational safety.
 
 ![Helm Install Demo](assets/demo-helm-install.svg)
 
 ```bash
-# Production deployment with HA
+# Production deployment with HA (3 replicas, S3 event log, leader election)
 helm install rynxs ./helm/rynxs -n rynxs --create-namespace -f helm/rynxs/values-production.yaml
 
 # Verify installation
 kubectl get pods -n rynxs -l app.kubernetes.io/name=rynxs
 ```
 
-See [`docs/PRODUCTION_CHECKLIST.md`](docs/PRODUCTION_CHECKLIST.md) for full go-live validation (10 steps + 2-minute smoke test).
+**Next step:** [`docs/PRODUCTION_CHECKLIST.md`](docs/PRODUCTION_CHECKLIST.md) — 10-step validation + 2-minute smoke test
+
+---
+
+### 🔬 Development/Proof (Kustomize) — Quick Demo
+
+**Use this if:** You want to explore Rynxs quickly or understand the operator without production complexity.
+
+```bash
+# Install CRDs + operator (single replica, local PVC)
+kubectl apply -f crds/
+kubectl apply -k deploy/kustomize/base
+
+# Create test agent
+kubectl apply -f docs/examples/agent.yaml
+
+# Watch operator logs
+kubectl logs -f -l app=rynxs-operator
+```
+
+**Note:** This mode uses local PVC storage and is **not suitable for HA or production**.
+
+**Upgrade path:** For production, migrate to Helm deployment (see migration guide in [`helm/rynxs/README.md`](helm/rynxs/README.md))
 
 ---
 
@@ -67,6 +97,39 @@ Rynxs = "AI computers" with governance, auditability, and operational safety.
 - **Go-live checklist** — 10-step validation + 2-minute smoke test
 - **Alerts + runbooks** — RynxsNoLeader, RynxsLeaderFlap, RynxsEventStoreErrorsHigh, and more
 - **S3 enforcement** — Bucket policy with conditional writes (If-None-Match) prevents log corruption
+
+---
+
+## Threat Model & Operational Assumptions
+
+Rynxs is designed with **honest security assumptions** — understanding what the platform guarantees and where operational discipline is required.
+
+### What Rynxs Provides
+
+✅ **Event sourcing + hash-chain integrity** — Tamper-evident audit log (detect corruption, not prevent)
+✅ **Leader election** — Best-effort single-writer via Kubernetes Lease (split-brain is **mitigated**, not eliminated)
+✅ **S3 conditional writes** — Infrastructure-level CAS (If-None-Match) prevents duplicate sequence writes
+✅ **Observability** — Metrics, alerts, runbooks for incident detection and response
+✅ **Forensic traceability** — Fencing tokens + event metadata enable post-mortem analysis
+
+### What Rynxs Requires (Operational Responsibilities)
+
+⚠️ **CNI with NetworkPolicy enforcement** — Default-deny networking depends on CNI (Calico, Cilium, Weave)
+⚠️ **S3 bucket policy enforcement** — AWS S3 supports If-None-Match (MinIO policy enforcement not guaranteed)
+⚠️ **Multi-zone cluster topology** — Zone spread constraints require `topology.kubernetes.io/zone` node labels
+⚠️ **Namespace labeling standards** — Metrics NetworkPolicy relies on standard labels (e.g., `name=prometheus`)
+⚠️ **Cluster RBAC scope** — Operator requires cluster-level permissions (namespace-scoped mode: roadmap)
+
+### Controlled Risks (Not Eliminated, But Observable)
+
+🔍 **Split-brain** — Network partitions can separate leader from API server (mitigated via cooldown + CAS + forensics)
+🔍 **Clock skew** — Lease expiration edge cases exist (Kubernetes API timestamps used, not local clocks)
+🔍 **S3 lifecycle** — Unbounded event log growth requires retention policy (operational concern, not automated)
+
+**Documentation:**
+- S3 bucket policy setup: [`docs/S3_BUCKET_POLICY.md`](docs/S3_BUCKET_POLICY.md)
+- RBAC permissions rationale: [`docs/RBAC.md`](docs/RBAC.md)
+- Split-brain runbooks: [`docs/PROMETHEUS_ALERTS.md`](docs/PROMETHEUS_ALERTS.md)
 
 ---
 
@@ -296,19 +359,24 @@ Rynxs development is organized across multiple branches, each serving a specific
 ## Roadmap
 
 ### Near-term (Q1 2026)
+- [ ] **CI/CD automation** (Helm lint, pytest, e2e tests on PR)
+- [ ] **Namespace-scoped mode** (reduce ClusterRole to Role for enterprise adoption)
 - [ ] Multi-channel gateway (WebSocket, Slack, Telegram integration)
 - [ ] Advanced NetworkPolicy automation (per-agent egress rules)
 - [ ] S3 Object Lock (WORM) compliance mode
+- [ ] **Event log lifecycle** (retention policies, checkpointing, compaction)
 
 ### Mid-term (Q2-Q3 2026)
 - [ ] gVisor/Kata runtime class profiles
 - [ ] Policy packs (pre-configured security templates)
 - [ ] SIEM integration (OTel, Fluent Bit)
+- [ ] **Idempotency audit framework** (detect duplicate side-effects)
 
 ### Long-term (Q4 2026+)
 - [ ] Cross-universe travel sessions (Phase 3)
 - [ ] Deterministic replay CLI (time-travel debugging)
 - [ ] Multi-tenant isolation (namespace-per-tenant)
+- [ ] **Replay performance optimization** (snapshot-based fast-forward)
 
 ---
 
