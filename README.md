@@ -18,7 +18,7 @@ This isn't "magic guarantees" — it's **mitigated, observable, and forensically
 
 Rynxs offers two deployment paths depending on your goal:
 
-### 🚀 Production Deployment (Helm) — **RECOMMENDED**
+### Production Deployment (Helm) — **RECOMMENDED**
 
 **Use this if:** You're deploying to production or need HA, durability, and operational safety.
 
@@ -32,13 +32,13 @@ helm install rynxs ./helm/rynxs -n rynxs --create-namespace -f helm/rynxs/values
 kubectl get pods -n rynxs -l app.kubernetes.io/name=rynxs
 ```
 
-**⚠️ Multi-zone requirement:** Production values use `whenUnsatisfiable: DoNotSchedule` for zone spread (hard constraint). If your cluster has fewer than 2 zones, pods will remain Pending. For single-zone clusters, override with `ScheduleAnyway` in custom values or use default values (no zone constraint).
+**Multi-zone requirement:** Production values use `whenUnsatisfiable: DoNotSchedule` for zone spread (hard constraint). If your cluster has fewer than 2 zones, pods will remain Pending. For single-zone clusters, override with `ScheduleAnyway` in custom values or use default values (no zone constraint).
 
 **Next step:** [`docs/PRODUCTION_CHECKLIST.md`](docs/PRODUCTION_CHECKLIST.md) — 10-step validation + 2-minute smoke test
 
 ---
 
-### 🔬 Development/Proof (Kustomize) — Quick Demo
+### Development/Proof (Kustomize) — Quick Demo
 
 **Use this if:** You want to explore Rynxs quickly or understand the operator without production complexity.
 
@@ -70,10 +70,10 @@ AI agents need "computer capabilities" (shell, file system, browser, tools) to b
 
 **Rynxs solves this:**
 A Kubernetes-native platform that gives agents **governed computer capabilities**:
-- ✅ Agents get workspaces, tools, and sandboxed execution environments
-- ✅ Every action is recorded in an **immutable, hash-chained audit log**
-- ✅ Policies enforce isolation, resource limits, and network access controls
-- ✅ Operations teams can observe, debug, and control the system with **metrics, alerts, and runbooks**
+- Agents get workspaces, tools, and sandboxed execution environments
+- Every action is recorded in an **immutable, hash-chained audit log**
+- Policies enforce isolation, resource limits, and network access controls
+- Operations teams can observe, debug, and control the system with **metrics, alerts, and runbooks**
 
 **In one sentence:**
 Rynxs = "AI computers" with governance, auditability, and operational safety.
@@ -108,25 +108,25 @@ Rynxs is designed with **honest security assumptions** — understanding what th
 
 ### What Rynxs Provides
 
-✅ **Event sourcing + hash-chain integrity** — Tamper-evident audit log (detect corruption, not prevent)
-✅ **Leader election** — Best-effort single-writer via Kubernetes Lease (split-brain is **mitigated**, not eliminated)
-✅ **S3 conditional writes** — Infrastructure-level CAS (If-None-Match) prevents duplicate sequence writes
-✅ **Observability** — Metrics, alerts, runbooks for incident detection and response
-✅ **Forensic traceability** — Fencing tokens + event metadata enable post-mortem analysis
+**Event sourcing + hash-chain integrity** — Tamper-evident audit log (detect corruption, not prevent)
+**Leader election** — Best-effort single-writer via Kubernetes Lease (split-brain is **mitigated**, not eliminated)
+**S3 conditional writes** — Infrastructure-level CAS (If-None-Match) prevents duplicate sequence writes
+**Observability** — Metrics, alerts, runbooks for incident detection and response
+**Forensic traceability** — Fencing tokens + event metadata enable post-mortem analysis
 
 ### What Rynxs Requires (Operational Responsibilities)
 
-⚠️ **CNI with NetworkPolicy enforcement** — Default-deny networking depends on CNI (Calico, Cilium, Weave)
-⚠️ **S3 bucket policy enforcement** — AWS S3 supports If-None-Match (MinIO policy enforcement not guaranteed)
-⚠️ **Multi-zone cluster topology** — Zone spread constraints require `topology.kubernetes.io/zone` node labels
-⚠️ **Namespace labeling standards** — Metrics NetworkPolicy relies on standard labels (e.g., `name=prometheus`)
-⚠️ **Cluster RBAC scope** — Operator requires cluster-level permissions (namespace-scoped mode: roadmap)
+**CNI with NetworkPolicy enforcement** — Default-deny networking depends on CNI (Calico, Cilium, Weave)
+**S3 bucket policy enforcement** — AWS S3 supports If-None-Match (MinIO policy enforcement not guaranteed)
+**Multi-zone cluster topology** — Zone spread constraints require `topology.kubernetes.io/zone` node labels
+**Namespace labeling standards** — Metrics NetworkPolicy relies on standard labels (e.g., `name=prometheus`)
+**Cluster RBAC scope** — Operator requires cluster-level permissions (namespace-scoped mode: roadmap)
 
 ### Controlled Risks (Not Eliminated, But Observable)
 
-🔍 **Split-brain** — Network partitions can separate leader from API server (mitigated via cooldown + CAS + forensics)
-🔍 **Clock skew** — Lease expiration edge cases exist (Kubernetes API timestamps used, not local clocks)
-🔍 **S3 lifecycle** — Unbounded event log growth requires retention policy (operational concern, not automated)
+**Split-brain** — Network partitions can separate leader from API server (mitigated via cooldown + CAS + forensics)
+**Clock skew** — Lease expiration edge cases exist (Kubernetes API timestamps used, not local clocks)
+**S3 lifecycle** — Unbounded event log growth requires retention policy (operational concern, not automated)
 
 **Documentation:**
 - S3 bucket policy setup: [`docs/S3_BUCKET_POLICY.md`](docs/S3_BUCKET_POLICY.md)
@@ -243,11 +243,11 @@ Rynxs has been hardened and validated for **production deployment** with focus o
 
 ### What this proves (in plain terms)
 
-- ✅ **Deployable**: Single-command install via Helm (no manual YAML orchestration)
-- ✅ **HA (High Availability)**: Multi-replica operator with Kubernetes Lease leader election + failover validation
-- ✅ **Durable state**: Append-only event log in **S3/MinIO**, with hash-chain integrity checks
-- ✅ **Observable operations**: Prometheus metrics + critical alerts + runbooks for incident response
-- ✅ **Controlled risk posture**: No "magic guarantees"; split-brain is **mitigated** and **forensically analyzable**
+- **Deployable**: Single-command install via Helm (no manual YAML orchestration)
+- **HA (High Availability)**: Multi-replica operator with Kubernetes Lease leader election + failover validation
+- **Durable state**: Append-only event log in **S3/MinIO**, with hash-chain integrity checks
+- **Observable operations**: Prometheus metrics + critical alerts + runbooks for incident response
+- **Controlled risk posture**: No "magic guarantees"; split-brain is **mitigated** and **forensically analyzable**
 
 ### Start Here (Go-Live)
 
@@ -274,12 +274,12 @@ Rynxs development is organized across multiple branches. **For production deploy
 **Purpose:** Production-ready operator with HA, durable S3 event log, observability, and validated failover
 
 **What's included (on top of `main`):**
-- ✅ **Helm chart** (one-command deploy, production values)
-- ✅ **HA leader election** (Kubernetes Lease + failover tests)
-- ✅ **S3 event store** (append-only, hash-chain, MinIO support)
-- ✅ **Observability** (Prometheus metrics, alerts, runbooks, structured logs)
-- ✅ **Production hardening** (split-brain mitigations, topology spread, PDB, metric drift fix)
-- ✅ **Go-live checklist** (10-step validation + 2-minute smoke test)
+- **Helm chart** (one-command deploy, production values)
+- **HA leader election** (Kubernetes Lease + failover tests)
+- **S3 event store** (append-only, hash-chain, MinIO support)
+- **Observability** (Prometheus metrics, alerts, runbooks, structured logs)
+- **Production hardening** (split-brain mitigations, topology spread, PDB, metric drift fix)
+- **Go-live checklist** (10-step validation + 2-minute smoke test)
 
 **Use case:** Deploy to production with HA, durability, and operational safety
 
